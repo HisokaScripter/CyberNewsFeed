@@ -5,6 +5,7 @@ try:
 except Exception:
     _HAS_CLOUDSCRAPER = False
 import requests, csv, json, time, random
+from html import escape
 from bs4 import BeautifulSoup
 import feedparser
 from datetime import datetime
@@ -262,6 +263,82 @@ class CyberSecScraper:
             writer.writeheader(); writer.writerows(self.articles)
         print(f"✓ Saved to {filename}")
 
+    def save_to_html(self):
+        if not self.articles:
+            print("No articles to save!"); return
+
+        filename = datetime.now().strftime('cybersec_news_%Y%m%d_%H%M%S.html')
+        columns = ['source','CVEs','date','notes','article','AI-Summary','iocs','ThreatActors','TTPs','contents','tags']
+
+        def _fmt_cell(value):
+            if value is None:
+                return ""
+            if isinstance(value, list):
+                value = ", ".join(str(v) for v in value)
+            elif isinstance(value, dict):
+                value = json.dumps(value, ensure_ascii=False)
+            return escape(str(value))
+
+        table_rows = []
+        for article in self.articles:
+            cells = []
+            for col in columns:
+                value = article.get(col, "")
+                if col == 'article' and value:
+                    safe_url = escape(str(value), quote=True)
+                    cell = f"<td><a href=\"{safe_url}\" target=\"_blank\" rel=\"noopener noreferrer\">{safe_url}</a></td>"
+                else:
+                    cell = f"<td>{_fmt_cell(value)}</td>"
+                cells.append(cell)
+            table_rows.append(f"<tr>{''.join(cells)}</tr>")
+
+        html_doc = f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Cybersecurity News Feed</title>
+  <link rel=\"stylesheet\" href=\"https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css\">
+  <style>
+    body {{ font-family: Arial, sans-serif; padding: 1.5rem; background: #0f172a; color: #e2e8f0; }}
+    h1 {{ text-align: center; margin-bottom: 1.5rem; }}
+    table.dataTable {{ border-collapse: collapse; width: 100%; }}
+    table.dataTable thead th {{ background: #1e293b; color: #f8fafc; }}
+    table.dataTable tbody tr:nth-child(odd) {{ background: #1e293b; }}
+    table.dataTable tbody tr:nth-child(even) {{ background: #0f172a; }}
+    table.dataTable tbody td {{ color: #e2e8f0; }}
+    a {{ color: #38bdf8; }}
+  </style>
+</head>
+<body>
+  <h1>Cybersecurity News Feed</h1>
+  <table id=\"cyber-news\" class=\"display\">
+    <thead>
+      <tr>{''.join(f'<th>{escape(col)}</th>' for col in columns)}</tr>
+    </thead>
+    <tbody>
+      {''.join(table_rows)}
+    </tbody>
+  </table>
+  <script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script>
+  <script src=\"https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js\"></script>
+  <script>
+    $(document).ready(function() {{
+      $('#cyber-news').DataTable({{
+        pageLength: 25,
+        order: [[2, 'desc']],
+        responsive: true
+      }});
+    }});
+  </script>
+</body>
+</html>
+"""
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(html_doc)
+        print(f"✓ Saved to {filename}")
+
     def save_to_json(self, filename='cybersec_news.json'):
         if not self.articles:
             print("No articles to save!"); return
@@ -288,4 +365,5 @@ if __name__ == "__main__":
     s.scrape_DarkReading()
     s.scrape_Huntress()
     s.save_to_csv()
+    s.save_to_html()
     print("\n✓ Done!")
