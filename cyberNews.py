@@ -326,7 +326,10 @@ class CyberSecScraper:
             safe_full = escape(raw_text, quote=True)
             return (
                 f"<td data-full-text=\"{safe_full}\">"
+                "<div class=\"cell-inner\">"
                 f"<div class=\"cell-content\">{content}</div>"
+                "<button type=\"button\" class=\"expand-button\" title=\"View full content\">View full</button>"
+                "</div>"
                 "</td>"
             )
 
@@ -367,6 +370,12 @@ class CyberSecScraper:
       position: relative;
       user-select: none;
     }}
+    .cell-inner {{
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      position: relative;
+    }}
     .cell-content {{
       max-height: 150px;
       overflow: hidden;
@@ -385,10 +394,94 @@ class CyberSecScraper:
       background: linear-gradient(to bottom, rgba(15, 23, 42, 0) 0%, rgba(15, 23, 42, 0.95) 100%);
       pointer-events: none;
     }}
+    td:not(.is-truncated) .cell-content::after {{
+      display: none;
+    }}
     td, th {{
       width: 220px;
       max-width: 500px;
       overflow: hidden;
+    }}
+    .expand-button {{
+      display: none;
+      align-self: flex-end;
+      background: #38bdf8;
+      color: #0f172a;
+      border: none;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.9rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+    }}
+    .expand-button:hover,
+    .expand-button:focus {{
+      background: #0ea5e9;
+      color: #f8fafc;
+      outline: none;
+    }}
+    td.is-truncated .expand-button {{
+      display: inline-flex;
+    }}
+    .detail-modal {{
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }}
+    .detail-modal.is-visible {{
+      display: flex;
+    }}
+    .detail-modal__backdrop {{
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.85);
+    }}
+    .detail-modal__dialog {{
+      position: relative;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      max-width: min(960px, 90vw);
+      max-height: min(720px, 90vh);
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.7);
+      overflow: hidden;
+    }}
+    .detail-modal__dialog h2 {{
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }}
+    .detail-modal__content {{
+      background: #1e293b;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: calc(90vh - 6rem);
+      overflow: auto;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }}
+    .detail-modal__close {{
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 1.75rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0.25rem;
+    }}
+    .detail-modal__close:hover,
+    .detail-modal__close:focus {{
+      color: #e2e8f0;
+      outline: none;
     }}
     .column-resizer {{
       position: absolute;
@@ -426,6 +519,14 @@ class CyberSecScraper:
       {''.join(table_rows)}
     </tbody>
   </table>
+  <div id=\"detail-modal\" class=\"detail-modal\" role=\"dialog\" aria-modal=\"true\" aria-hidden=\"true\" tabindex=\"-1\">
+    <div class=\"detail-modal__backdrop\" data-close-modal></div>
+    <div class=\"detail-modal__dialog\">
+      <button type=\"button\" class=\"detail-modal__close\" aria-label=\"Close\" data-close-modal>&times;</button>
+      <h2>Full Entry</h2>
+      <pre class=\"detail-modal__content\"></pre>
+    </div>
+  </div>
   <script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script>
   <script src=\"https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js\"></script>
   <script>
@@ -436,6 +537,43 @@ class CyberSecScraper:
         responsive: true,
         autoWidth: false
       }});
+
+      const $modal = $('#detail-modal');
+      const $modalContent = $modal.find('.detail-modal__content');
+      let previousFocus = null;
+
+      function openModal(text) {{
+        if (!text) {{
+          return;
+        }}
+        previousFocus = document.activeElement;
+        $modalContent.text(text);
+        $modal.attr('aria-hidden', 'false').addClass('is-visible');
+        $modal.focus();
+      }}
+
+      function closeModal() {{
+        $modal.attr('aria-hidden', 'true').removeClass('is-visible');
+        $modalContent.text('');
+        if (previousFocus && typeof previousFocus.focus === 'function') {{
+          previousFocus.focus();
+        }}
+        previousFocus = null;
+      }}
+
+      function markOverflowCells() {{
+        $('#cyber-news tbody td').each(function() {{
+          const content = $(this).find('.cell-content')[0];
+          if (!content) {{
+            return;
+          }}
+          const isOverflowing = content.scrollHeight - content.clientHeight > 1;
+          $(this).toggleClass('is-truncated', isOverflowing);
+        }});
+      }}
+
+      markOverflowCells();
+      table.on('draw.dt', markOverflowCells);
 
       function setColumnWidth(index, width) {{
         const widthPx = `${{Math.max(width, 120)}}px`;
@@ -463,27 +601,41 @@ class CyberSecScraper:
 
           $(document).on('mouseup.columnResize', function() {{
             $(document).off('.columnResize');
+            markOverflowCells();
           }});
         }});
       }});
 
+      $('#cyber-news tbody').on('click', '.expand-button', function(event) {{
+        event.preventDefault();
+        event.stopPropagation();
+        const fullText = $(this).closest('td').data('full-text') || '';
+        openModal(fullText);
+      }});
+
       $('#cyber-news tbody').on('dblclick', 'td', function(event) {{
-        if ($(event.target).is('a')) {{
+        if ($(event.target).is('a, button')) {{
           return;
         }}
         const fullText = $(this).data('full-text') || '';
-        const detailWindow = window.open('', '_blank', 'noopener');
-        if (detailWindow) {{
-          const safeText = $('<div>').text(fullText).html();
-          detailWindow.document.write(`<!DOCTYPE html><html lang="en"><head><title>Cell Details</title><meta charset="utf-8"><style>body {{ font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; padding: 1.5rem; }} pre {{ white-space: pre-wrap; word-break: break-word; background: #1e293b; padding: 1rem; border-radius: 0.75rem; max-width: 90vw; max-height: 90vh; overflow: auto; }}</style></head><body><h2>Full Entry</h2><pre>${{safeText}}</pre></body></html>`);
-          detailWindow.document.close();
+        openModal(fullText);
+      }});
+
+      $modal.on('click', '[data-close-modal]', function(event) {{
+        event.preventDefault();
+        closeModal();
+      }});
+
+      $(document).on('keydown', function(event) {{
+        if (event.key === 'Escape' && $modal.hasClass('is-visible')) {{
+          closeModal();
         }}
       }});
     }});
   </script>
 </body>
 </html>
-""" 
+"""
     
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(html_doc)
