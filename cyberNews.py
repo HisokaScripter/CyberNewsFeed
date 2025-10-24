@@ -12,6 +12,7 @@ from datetime import datetime
 import lmstudio as lms
 import json,re
 from markdownify import markdownify as md
+from pathlib import Path
 
 class CyberSecScraper:
     def __init__(self):
@@ -70,6 +71,9 @@ class CyberSecScraper:
         """
         self.aiModel = "qwen/qwen3-4b-2507"
         self.articles = []
+        base_dir = Path(__file__).resolve().parent
+        self.parsed_articles_file = base_dir / "ParsedArticles.txt"
+        self.parsed_articles = self._load_parsed_articles()
         self.KeyWords = [
             " cybersecurity ", " infosec ", " cyber attack ", " threat ", " exploit ", " vulnerability ",
             " patch ", " malware ", " ransomware ", " phishing ", " spyware ", " trojan ", " botnet ",
@@ -133,6 +137,38 @@ class CyberSecScraper:
     def _backoff_sleep(self, attempt):
         delay = (1.5 ** attempt) + random.uniform(0, 0.5)
         time.sleep(min(delay, 8.0))
+
+    def _load_parsed_articles(self):
+        parsed = set()
+        try:
+            if not self.parsed_articles_file.exists():
+                self.parsed_articles_file.touch()
+                return parsed
+            with self.parsed_articles_file.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        parsed.add(line)
+        except Exception as exc:
+            print(f"Warning: Could not read parsed articles file: {exc}")
+        return parsed
+
+    def _article_identifier(self, source, title, link):
+        if link:
+            return link.strip()
+        if title:
+            return f"{source}:{title.strip()}"
+        return None
+
+    def _record_parsed_article(self, identifier):
+        if not identifier or identifier in self.parsed_articles:
+            return
+        self.parsed_articles.add(identifier)
+        try:
+            with self.parsed_articles_file.open("a", encoding="utf-8") as f:
+                f.write(identifier + "\n")
+        except Exception as exc:
+            print(f"Warning: Could not update parsed articles file: {exc}")
 
     def _summarize(self, text):
         model = lms.llm(self.aiModel)
@@ -211,9 +247,13 @@ class CyberSecScraper:
             if count <= 0:
                 return
             count -= 1
-            title = getattr(entry, "title")
-            link = getattr(entry, "link")
-            published = getattr(entry, "published", getattr(entry, "updated"))
+            title = getattr(entry, "title", "")
+            link = getattr(entry, "link", "")
+            published = getattr(entry, "published", getattr(entry, "updated", ""))
+            identifier = self._article_identifier(source, title, link)
+            if identifier and identifier in self.parsed_articles:
+                print(f"Skipping previously parsed article: {title}")
+                continue
             body = ""
             '''
             #if hasattr(entry, "summary"):
@@ -270,6 +310,8 @@ class CyberSecScraper:
                     "contents": body,
                     "tags": tags
                 })
+            if identifier:
+                self._record_parsed_article(identifier)
             self._sleep()
 
     def scrape_TheHackerNews(self):    self.ingest_feed("The Hacker News")
