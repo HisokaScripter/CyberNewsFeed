@@ -58,20 +58,7 @@ class CyberSecScraper:
             " pentest ", " penetration test ", " red team ", " blue team ", " purple team ", " recon ",
             " enumeration ", " Cobalt Strike ", " mimikatz ", " bloodhound ", " nmap ", " burpsuite ",
             " phishing campaign ", " attack simulation ", " adversary emulation ", " foothold ", " post exploitation ",
-            " packet capture ", " Wireshark ", " DNS ", " HTTPS ", " TLS ", " MITM ", " VPN ", " cloud ",
-            " AWS ", " Azure ", " GCP ", " Kubernetes ", " Docker ", " IAM ", " zero trust ", " SASE ",
-            " compliance ", " NIST ", " ISO ", " CIS ", " SOC2 ", " audit ", " GDPR ", " HIPAA ", " CCPA ",
-            " DORA ", " policy ", " standard ", " regulation ", " procedure ", " risk management ",
-            " AI ", " LLM ", " machine learning ", " adversarial ML ", " prompt injection ", " supply chain attack ",
-            " #MITRE ", " #CVE ", " #TTP ", " #IOC ", " #APTGroup ", " #ThreatIntel ", " #Ransomware ",
-            " #Malware ", " #Exploit ", " #DFIR ", " #Detection ", " #CloudSecurity ", " #AIThreats ",
-            " #Policy ", " #Compliance ", " #Phishing ", " #SOC ", " #IncidentResponse "
-        ]
-        self.Feeds = {
-            "The Hacker News": "https://feeds.feedburner.com/TheHackersNews?format=xml",
-            "Bleeping Computer": "https://www.bleepingcomputer.com/feed/",
-            "Dark Reading": "https://www.darkreading.com/rss.xml"
-        }
+@@ -71,50 +75,72 @@ class CyberSecScraper:
         self.urls = {
             "Huntress Blog": "https://www.huntress.com/blog"
         }
@@ -144,37 +131,7 @@ class CyberSecScraper:
         text_lower = text.lower()
         return any(kw in text_lower for kw in patch_keywords)
     
-    def _tag(self, title, body):
-        hay = f" {title.lower()} \n {body.lower()} "
-        found = [k for k in self.KeyWords if k.strip().lower() in hay]
-        seen, out = set(), []
-        for k in found:
-            ks = k.strip().lower()
-            if ks not in seen:
-                seen.add(ks); out.append(k)
-        return " ".join(out)
-
-    def maybe_fetch_html(self, url, referer=None, max_attempts=3, debug=False):
-        scraper = cloudscraper.create_scraper()
-        headers = self.sess.headers.copy()
-        if referer:
-            headers["Referer"] = referer
-        attempt = 0
-        while attempt < max_attempts:
-            try:
-                if _HAS_CLOUDSCRAPER:
-                    resp = scraper.get(url, headers=headers, timeout=15)
-                else:
-                    resp = self.sess.get(url, headers=headers, timeout=15)
-                if resp.status_code == 200:
-                    html = self._decode_html(resp)
-                    return html
-                else:
-                    if debug:
-                        print(f"Warning: Received status code {resp.status_code} for URL: {url}")
-            except Exception as e:
-                if debug:
-                    print(f"Error fetching URL {url}: {e}")
+@@ -152,50 +178,53 @@ class CyberSecScraper:
             attempt += 1
             self._backoff_sleep(attempt)
 
@@ -228,11 +185,7 @@ class CyberSecScraper:
             content = summary.content
             structured = summary.structured
             parsed = summary.parsed
-
-            data = json.loads(content)
-            summary = data.get("summary", "N/A")
-            threatactors = data.get("threat_actors", [])
-            iocs = data.get("iocs", [])
+@@ -207,85 +236,273 @@ class CyberSecScraper:
             ttps = data.get("ttps", [])
             cves = data.get("cves", [])
             notes = data.get("notes", "")
@@ -299,14 +252,25 @@ class CyberSecScraper:
         filename = datetime.now().strftime('cybersec_news_%Y%m%d_%H%M%S.html')
         columns = ['source','CVEs','date','notes','article','AI-Summary','iocs','ThreatActors','TTPs','contents','tags']
 
-        def _fmt_cell(value):
+        def _raw_text(value):
             if value is None:
                 return ""
             if isinstance(value, list):
-                value = ", ".join(str(v) for v in value)
-            elif isinstance(value, dict):
-                value = json.dumps(value, ensure_ascii=False)
-            return escape(str(value))
+                return ", ".join(str(v) for v in value)
+            if isinstance(value, dict):
+                return json.dumps(value, ensure_ascii=False)
+            return str(value)
+
+        def _fmt_cell(value):
+            return escape(_raw_text(value))
+
+        def _wrap_cell(content, raw_text):
+            safe_full = escape(raw_text, quote=True)
+            return (
+                f"<td data-full-text=\"{safe_full}\">"
+                f"<div class=\"cell-content\">{content}</div>"
+                "</td>"
+            )
 
         table_rows = []
         for article in self.articles:
@@ -315,9 +279,10 @@ class CyberSecScraper:
                 value = article.get(col, "")
                 if col == 'article' and value:
                     safe_url = escape(str(value), quote=True)
-                    cell = f"<td><a href=\"{safe_url}\" target=\"_blank\" rel=\"noopener noreferrer\">{safe_url}</a></td>"
+                    content = f"<a href=\"{safe_url}\" target=\"_blank\" rel=\"noopener noreferrer\">{safe_url}</a>"
+                    cell = _wrap_cell(content, _raw_text(value))
                 else:
-                    cell = f"<td>{_fmt_cell(value)}</td>"
+                    cell = _wrap_cell(_fmt_cell(value), _raw_text(value))
                 cells.append(cell)
             table_rows.append(f"<tr>{''.join(cells)}</tr>")
 
@@ -331,11 +296,65 @@ class CyberSecScraper:
   <style>
     body {{ font-family: Arial, sans-serif; padding: 1.5rem; background: #0f172a; color: #e2e8f0; }}
     h1 {{ text-align: center; margin-bottom: 1.5rem; }}
-    table.dataTable {{ border-collapse: collapse; width: 100%; }}
+    table.dataTable {{ border-collapse: collapse; width: 100%; table-layout: fixed; }}
     table.dataTable thead th {{ background: #1e293b; color: #f8fafc; }}
     table.dataTable tbody tr:nth-child(odd) {{ background: #1e293b; }}
     table.dataTable tbody tr:nth-child(even) {{ background: #0f172a; }}
-    table.dataTable tbody td {{ color: #e2e8f0; }}
+    table.dataTable tbody td {{
+      color: #e2e8f0;
+      vertical-align: top;
+      position: relative;
+    }}
+    table.dataTable thead th {{
+      position: relative;
+      user-select: none;
+    }}
+    .cell-content {{
+      max-height: 150px;
+      overflow: hidden;
+      padding-right: 0.5rem;
+      display: block;
+      line-height: 1.4;
+      position: relative;
+    }}
+    .cell-content::after {{
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 24px;
+      background: linear-gradient(to bottom, rgba(15, 23, 42, 0) 0%, rgba(15, 23, 42, 0.95) 100%);
+      pointer-events: none;
+    }}
+    td, th {{
+      width: 220px;
+      max-width: 500px;
+      overflow: hidden;
+    }}
+    .column-resizer {{
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 6px;
+      cursor: col-resize;
+      user-select: none;
+      height: 100%;
+    }}
+    .column-resizer::after {{
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 2px;
+      width: 2px;
+      background: rgba(148, 163, 184, 0.5);
+      opacity: 0;
+      transition: opacity 0.2s ease-in-out;
+    }}
+    th:hover .column-resizer::after {{
+      opacity: 1;
+    }}
     a {{ color: #38bdf8; }}
   </style>
 </head>
@@ -353,10 +372,54 @@ class CyberSecScraper:
   <script src=\"https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js\"></script>
   <script>
     $(document).ready(function() {{
-      $('#cyber-news').DataTable({{
+      const table = $('#cyber-news').DataTable({{
         pageLength: 25,
         order: [[2, 'desc']],
-        responsive: true
+        responsive: true,
+        autoWidth: false
+      }});
+
+      function setColumnWidth(index, width) {{
+        const widthPx = `${{Math.max(width, 120)}}px`;
+        $(table.column(index).header()).css('width', widthPx);
+        table.column(index).nodes().to$().css('width', widthPx);
+      }}
+
+      table.columns().every(function(index) {{
+        const header = $(this.header());
+        const initialWidth = header.outerWidth() || 220;
+        setColumnWidth(index, initialWidth);
+        const resizer = $('<span class="column-resizer" title="Drag to resize"></span>');
+        header.append(resizer);
+
+        resizer.on('mousedown', function(event) {{
+          event.preventDefault();
+          event.stopPropagation();
+          const startX = event.pageX;
+          const startWidth = header.outerWidth();
+
+          $(document).on('mousemove.columnResize', function(moveEvent) {{
+            const delta = moveEvent.pageX - startX;
+            setColumnWidth(index, startWidth + delta);
+          }});
+
+          $(document).on('mouseup.columnResize', function() {{
+            $(document).off('.columnResize');
+          }});
+        }});
+      }});
+
+      $('#cyber-news tbody').on('dblclick', 'td', function(event) {{
+        if ($(event.target).is('a')) {{
+          return;
+        }}
+        const fullText = $(this).data('full-text') || '';
+        const detailWindow = window.open('', '_blank', 'noopener');
+        if (detailWindow) {{
+          const safeText = $('<div>').text(fullText).html();
+          detailWindow.document.write(`<!DOCTYPE html><html lang="en"><head><title>Cell Details</title><meta charset="utf-8"><style>body {{ font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; padding: 1.5rem; }} pre {{ white-space: pre-wrap; word-break: break-word; background: #1e293b; padding: 1rem; border-radius: 0.75rem; max-width: 90vw; max-height: 90vh; overflow: auto; }}</style></head><body><h2>Full Entry</h2><pre>${{safeText}}</pre></body></html>`);
+          detailWindow.document.close();
+        }}
       }});
     }});
   </script>
