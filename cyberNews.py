@@ -1,4 +1,5 @@
 import gzip
+import os
 try:
     import cloudscraper
     _HAS_CLOUDSCRAPER = True
@@ -30,6 +31,8 @@ class CyberSecScraper:
         self.prompt = "Summarize in ≤100 words focusing only on cybersecurity. Extract JSON with fields: summary, iocs, ttps, threat_actors, cves (cve, cvss, patch_available, weaponization_stage: Disclosure(4)|ProofOfConcept(1)|ExploitLikely(12)|Exploited(277), exploited, mapped_mitre_ids, yara, sigma), notes, source_url. If no data, use null/empty. Include confidence for each. Return valid JSON only, no text."
         self.aiModel = "qwen/qwen3-4b-2507"
         self.articles = []
+        self.parsed_articles_file = "parsed_articles"
+        self.parsed_articles = self._load_parsed_articles()
         self.KeyWords = [
             " cybersecurity ", " infosec ", " cyber attack ", " threat ", " exploit ", " vulnerability ",
             " patch ", " malware ", " ransomware ", " phishing ", " spyware ", " trojan ", " botnet ",
@@ -93,6 +96,28 @@ class CyberSecScraper:
     def _backoff_sleep(self, attempt):
         delay = (1.5 ** attempt) + random.uniform(0, 0.5)
         time.sleep(min(delay, 8.0))
+
+    def _ensure_parsed_articles_file(self):
+        if not os.path.exists(self.parsed_articles_file):
+            with open(self.parsed_articles_file, "w", encoding="utf-8"):
+                pass
+
+    def _load_parsed_articles(self):
+        self._ensure_parsed_articles_file()
+        try:
+            with open(self.parsed_articles_file, "r", encoding="utf-8") as f:
+                return {line.strip() for line in f if line.strip()}
+        except FileNotFoundError:
+            return set()
+
+    def _mark_article_parsed(self, identifier):
+        if not identifier:
+            return
+        if identifier in self.parsed_articles:
+            return
+        self.parsed_articles.add(identifier)
+        with open(self.parsed_articles_file, "a", encoding="utf-8") as f:
+            f.write(identifier + "\n")
 
     def _summarize(self, text):
         model = lms.llm(self.aiModel)
@@ -175,6 +200,9 @@ class CyberSecScraper:
             link = getattr(entry, "link")
             published = getattr(entry, "published", getattr(entry, "updated"))
             body = ""
+            if link in self.parsed_articles:
+                print(f"Skipping already parsed article: {link}")
+                continue
             '''
             #if hasattr(entry, "summary"):
                 body = BeautifulSoup(entry.summary, "html.parser").get_text(" ", strip=True)
@@ -230,6 +258,7 @@ class CyberSecScraper:
                     "contents": body,
                     "tags": tags
                 })
+            self._mark_article_parsed(link)
             self._sleep()
 
     def scrape_TheHackerNews(self):    self.ingest_feed("The Hacker News")
