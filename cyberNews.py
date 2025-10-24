@@ -229,7 +229,6 @@ class CyberSecScraper:
             attempt += 1
             self._backoff_sleep(attempt)
 
-
     def ingest_huntress(self):
         source = "Huntress Blog"
         url = self.urls[source]
@@ -241,12 +240,15 @@ class CyberSecScraper:
             f.write(soup.prettify())
 
     def ingest_feed(self, source):
-        count = 1 # how many articles to process per feed
         feed = feedparser.parse(self.Feeds[source])
         for entry in feed.entries:
-            if count <= 0:
-                return
-            count -= 1
+            print("-"*120)
+            print("Article count: ", len(self.articles)+1)
+            print("Source: ", source )
+            print("Title: ", getattr(entry, "title", ""))
+            #if count <= 0:
+            #    return
+            #count -= 1
             title = getattr(entry, "title", "")
             link = getattr(entry, "link", "")
             published = getattr(entry, "published", getattr(entry, "updated", ""))
@@ -278,8 +280,6 @@ class CyberSecScraper:
                 continue
             summary = self._summarize(body)
             content = summary.content
-            structured = summary.structured
-            parsed = summary.parsed
 
             data = json.loads(content)
             summary = data.get("summary", "N/A")
@@ -678,7 +678,6 @@ class CyberSecScraper:
 </body>
 </html>
 """
-    
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(html_doc)
         print(f"✓ Saved to {filename}")
@@ -707,7 +706,7 @@ if __name__ == "__main__":
     s.scrape_TheHackerNews()
     s.scrape_BleepingComputer()
     s.scrape_DarkReading()
-    s.scrape_Huntress()
+    #s.scrape_Huntress()
     s.save_to_csv()
     s.save_to_html()
     print("\n✓ Done!")
