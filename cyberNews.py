@@ -299,25 +299,14 @@ class CyberSecScraper:
         filename = datetime.now().strftime('cybersec_news_%Y%m%d_%H%M%S.html')
         columns = ['source','CVEs','date','notes','article','AI-Summary','iocs','ThreatActors','TTPs','contents','tags']
 
-        def _raw_text(value):
+        def _fmt_cell(value):
             if value is None:
                 return ""
             if isinstance(value, list):
-                return ", ".join(str(v) for v in value)
-            if isinstance(value, dict):
-                return json.dumps(value, ensure_ascii=False)
-            return str(value)
-
-        def _fmt_cell(value):
-            return escape(_raw_text(value))
-
-        def _wrap_cell(content, raw_text):
-            safe_full = escape(raw_text, quote=True)
-            return (
-                f"<td data-full-text=\"{safe_full}\">"
-                f"<div class=\"cell-content\">{content}</div>"
-                "</td>"
-            )
+                value = ", ".join(str(v) for v in value)
+            elif isinstance(value, dict):
+                value = json.dumps(value, ensure_ascii=False)
+            return escape(str(value))
 
         table_rows = []
         for article in self.articles:
@@ -330,6 +319,9 @@ class CyberSecScraper:
                     cell = _wrap_cell(content, _raw_text(value))
                 else:
                     cell = _wrap_cell(_fmt_cell(value), _raw_text(value))
+                    cell = f"<td><a href=\"{safe_url}\" target=\"_blank\" rel=\"noopener noreferrer\">{safe_url}</a></td>"
+                else:
+                    cell = f"<td>{_fmt_cell(value)}</td>"
                 cells.append(cell)
             table_rows.append(f"<tr>{''.join(cells)}</tr>")
 
@@ -402,6 +394,11 @@ class CyberSecScraper:
     th:hover .column-resizer::after {{
       opacity: 1;
     }}
+    table.dataTable {{ border-collapse: collapse; width: 100%; }}
+    table.dataTable thead th {{ background: #1e293b; color: #f8fafc; }}
+    table.dataTable tbody tr:nth-child(odd) {{ background: #1e293b; }}
+    table.dataTable tbody tr:nth-child(even) {{ background: #0f172a; }}
+    table.dataTable tbody td {{ color: #e2e8f0; }}
     a {{ color: #38bdf8; }}
   </style>
 </head>
@@ -467,6 +464,10 @@ class CyberSecScraper:
           detailWindow.document.write(`<!DOCTYPE html><html lang="en"><head><title>Cell Details</title><meta charset="utf-8"><style>body {{ font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; padding: 1.5rem; }} pre {{ white-space: pre-wrap; word-break: break-word; background: #1e293b; padding: 1rem; border-radius: 0.75rem; max-width: 90vw; max-height: 90vh; overflow: auto; }}</style></head><body><h2>Full Entry</h2><pre>${{safeText}}</pre></body></html>`);
           detailWindow.document.close();
         }}
+      $('#cyber-news').DataTable({{
+        pageLength: 25,
+        order: [[2, 'desc']],
+        responsive: true
       }});
     }});
   </script>
