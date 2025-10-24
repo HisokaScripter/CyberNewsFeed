@@ -28,7 +28,48 @@ class CyberSecScraper:
             "DNT": "1",
         })
 
-        self.prompt = "Summarize in ≤100 words focusing only on cybersecurity. Extract JSON with fields: summary, iocs, ttps, threat_actors, cves (cve, cvss, patch_available, weaponization_stage: Disclosure(4)|ProofOfConcept(1)|ExploitLikely(12)|Exploited(277), exploited, mapped_mitre_ids, yara, sigma), notes, source_url. If no data, use null/empty. Include confidence for each. Return valid JSON only, no text."
+        self.prompt = """You are a cybersecurity summarization and extraction engine.
+            Task:
+            Summarize the input in ≤100 words, focusing strictly on cybersecurity content.
+
+            Output:
+            Return a single valid JSON object (no extra text).  
+            Include these fields exactly:
+
+            {
+            "summary": string,
+            "iocs": [string] | null,
+            "ttps": [string] | null,
+            "threat_actors": [string (Name:Country)] | null,
+            "cves": [
+                {
+                "cve": string,
+                "cvss": number | null,
+                "patch_available": boolean | null,
+                "weaponization_stage": "Disclosure(4)" | "ProofOfConcept(1)" | "ExploitLikely(12)" | "Exploited(277)" | null,
+                "exploited": boolean | null,
+                "mapped_mitre_ids": [string] | null,
+                "yara": [string] | null,
+                "sigma": [string] | null
+                }
+            ] | null,
+            "notes": string | null,
+            "source_url": string | null,
+            "confidence": {
+                "summary": number(0-1),
+                "iocs": number(0-1),
+                "ttps": number(0-1),
+                "threat_actors": number(0-1),
+                "cves": number(0-1),
+                "notes": number(0-1)
+            }
+            }
+
+            Rules:
+            - If data is missing, use null or empty array/string.
+            - Confidence must reflect extraction certainty (0–1).
+            - Ensure valid JSON format with double quotes, no trailing commas, and no explanation text.
+        """
         self.aiModel = "qwen/qwen3-4b-2507"
         self.articles = []
         self.parsed_articles_file = "parsed_articles"
