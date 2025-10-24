@@ -1,10 +1,12 @@
 import gzip
+import os
 try:
     import cloudscraper
     _HAS_CLOUDSCRAPER = True
 except Exception:
     _HAS_CLOUDSCRAPER = False
 import requests, csv, json, time, random
+from html import escape
 from bs4 import BeautifulSoup
 import feedparser
 from datetime import datetime
@@ -29,6 +31,8 @@ class CyberSecScraper:
         self.prompt = "Summarize in ≤100 words focusing only on cybersecurity. Extract JSON with fields: summary, iocs, ttps, threat_actors, cves (cve, cvss, patch_available, weaponization_stage: Disclosure(4)|ProofOfConcept(1)|ExploitLikely(12)|Exploited(277), exploited, mapped_mitre_ids, yara, sigma), notes, source_url. If no data, use null/empty. Include confidence for each. Return valid JSON only, no text."
         self.aiModel = "qwen/qwen3-4b-2507"
         self.articles = []
+        self.parsed_articles_file = "parsed_articles"
+        self.parsed_articles = self._load_parsed_articles()
         self.KeyWords = [
             " cybersecurity ", " infosec ", " cyber attack ", " threat ", " exploit ", " vulnerability ",
             " patch ", " malware ", " ransomware ", " phishing ", " spyware ", " trojan ", " botnet ",
@@ -92,6 +96,28 @@ class CyberSecScraper:
     def _backoff_sleep(self, attempt):
         delay = (1.5 ** attempt) + random.uniform(0, 0.5)
         time.sleep(min(delay, 8.0))
+
+    def _ensure_parsed_articles_file(self):
+        if not os.path.exists(self.parsed_articles_file):
+            with open(self.parsed_articles_file, "w", encoding="utf-8"):
+                pass
+
+    def _load_parsed_articles(self):
+        self._ensure_parsed_articles_file()
+        try:
+            with open(self.parsed_articles_file, "r", encoding="utf-8") as f:
+                return {line.strip() for line in f if line.strip()}
+        except FileNotFoundError:
+            return set()
+
+    def _mark_article_parsed(self, identifier):
+        if not identifier:
+            return
+        if identifier in self.parsed_articles:
+            return
+        self.parsed_articles.add(identifier)
+        with open(self.parsed_articles_file, "a", encoding="utf-8") as f:
+            f.write(identifier + "\n")
 
     def _summarize(self, text):
         model = lms.llm(self.aiModel)
@@ -174,6 +200,9 @@ class CyberSecScraper:
             link = getattr(entry, "link")
             published = getattr(entry, "published", getattr(entry, "updated"))
             body = ""
+            if link in self.parsed_articles:
+                print(f"Skipping already parsed article: {link}")
+                continue
             '''
             #if hasattr(entry, "summary"):
                 body = BeautifulSoup(entry.summary, "html.parser").get_text(" ", strip=True)
@@ -229,6 +258,7 @@ class CyberSecScraper:
                     "contents": body,
                     "tags": tags
                 })
+            self._mark_article_parsed(link)
             self._sleep()
 
     def scrape_TheHackerNews(self):    self.ingest_feed("The Hacker News")
@@ -262,6 +292,107 @@ class CyberSecScraper:
             writer.writeheader(); writer.writerows(self.articles)
         print(f"✓ Saved to {filename}")
 
+    def save_to_html(self):
+        if not self.articles:
+            print("No articles to save!"); return
+
+        filename = datetime.now().strftime('cybersec_news_%Y%m%d_%H%M%S.html')
+        columns = ['source','CVEs','date','notes','article','AI-Summary','iocs','ThreatActors','TTPs','contents','tags']
+
+        def _fmt_cell(value):
+            if value is None:
+                return ""
+            if isinstance(value, list):
+                value = ", ".join(str(v) for v in value)
+            elif isinstance(value, dict):
+                value = json.dumps(value, ensure_ascii=False)
+            return escape(str(value))
+
+        def _wrap_cell(content):
+            return f"<td><div class=\"cell-content\">{content}</div></td>"
+
+        table_rows = []
+        for article in self.articles:
+            cells = []
+            for col in columns:
+                value = article.get(col, "")
+                if col == 'article' and value:
+                    safe_url = escape(str(value), quote=True)
+                    content = f"<a href=\"{safe_url}\" target=\"_blank\" rel=\"noopener noreferrer\">{safe_url}</a>"
+                    cell = _wrap_cell(content)
+                else:
+                    cell = _wrap_cell(_fmt_cell(value))
+                cells.append(cell)
+            table_rows.append(f"<tr>{''.join(cells)}</tr>")
+
+        html_doc = f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Cybersecurity News Feed</title>
+  <link rel=\"stylesheet\" href=\"https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css\">
+  <style>
+    body {{ font-family: Arial, sans-serif; padding: 1.5rem; background: #0f172a; color: #e2e8f0; }}
+    h1 {{ text-align: center; margin-bottom: 1.5rem; }}
+    table.dataTable {{ border-collapse: collapse; width: 100%; table-layout: fixed; }}
+    table.dataTable thead th {{ background: #1e293b; color: #f8fafc; }}
+    table.dataTable tbody tr:nth-child(odd) {{ background: #1e293b; }}
+    table.dataTable tbody tr:nth-child(even) {{ background: #0f172a; }}
+    table.dataTable tbody td {{ color: #e2e8f0; vertical-align: top; cursor: zoom-in; }}
+    .cell-content {{
+      max-height: 160px;
+      overflow-y: auto;
+      white-space: normal;
+      padding-right: 0.5rem;
+    }}
+    .cell-content.expanded {{
+      max-height: none;
+      overflow: visible;
+    }}
+    td .cell-content.expanded {{ cursor: zoom-out; }}
+    a {{ color: #38bdf8; }}
+  </style>
+</head>
+<body>
+  <h1>Cybersecurity News Feed</h1>
+  <table id=\"cyber-news\" class=\"display\">
+    <thead>
+      <tr>{''.join(f'<th>{escape(col)}</th>' for col in columns)}</tr>
+    </thead>
+    <tbody>
+      {''.join(table_rows)}
+    </tbody>
+  </table>
+  <script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script>
+  <script src=\"https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js\"></script>
+  <script>
+    $(document).ready(function() {{
+      $('#cyber-news').DataTable({{
+        pageLength: 25,
+        order: [[2, 'desc']],
+        responsive: true
+      }});
+
+      $('#cyber-news tbody').on('click', 'td', function(event) {{
+        if ($(event.target).is('a')) {{
+          return;
+        }}
+        const container = $(this).find('.cell-content');
+        if (container.length) {{
+          container.toggleClass('expanded');
+        }}
+      }});
+    }});
+  </script>
+</body>
+</html>
+"""
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(html_doc)
+        print(f"✓ Saved to {filename}")
+
     def save_to_json(self, filename='cybersec_news.json'):
         if not self.articles:
             print("No articles to save!"); return
@@ -288,4 +419,5 @@ if __name__ == "__main__":
     s.scrape_DarkReading()
     s.scrape_Huntress()
     s.save_to_csv()
+    s.save_to_html()
     print("\n✓ Done!")
