@@ -1,6 +1,8 @@
 import gzip
 import hashlib
 import os
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 try:
     import cloudscraper
     _HAS_CLOUDSCRAPER = True
@@ -1149,6 +1151,12 @@ class CyberSecScraper:
         target = Path(filename) if filename else self.html_output_file
         target.parent.mkdir(parents=True, exist_ok=True)
 
+        sanitized_articles = []
+        for article in self.articles:
+            sanitized = dict(article)
+            sanitized.pop("contents", None)
+            sanitized_articles.append(sanitized)
+
         def _raw_text(value):
             if value is None:
                 return ""
@@ -1198,10 +1206,11 @@ class CyberSecScraper:
                 seen_categories.add(label)
                 category_order.append(label)
 
-        cards_by_category = {label: [] for label in category_order}
+        cards_by_category = defaultdict(list)
         sources = set()
 
-        for idx, article in enumerate(self.articles):
+        def _prepare_card(payload):
+            idx, article = payload
             source_entries = article.get('sources') or []
             source_names = []
             for entry in source_entries:
@@ -1245,18 +1254,8 @@ class CyberSecScraper:
             if not categories:
                 categories = [primary_category]
 
-            for cat in categories:
-                if cat not in seen_categories:
-                    seen_categories.add(cat)
-                    category_order.append(cat)
-            if primary_category not in seen_categories:
-                seen_categories.add(primary_category)
-                category_order.append(primary_category)
-
             category_slugs = [_slugify(cat) for cat in categories]
             primary_slug = _slugify(primary_category)
-            if primary_category not in cards_by_category:
-                cards_by_category[primary_category] = []
 
             stats = []
             stats.append(f"<span class=\"feed-card__category\">{escape(primary_category)}</span>")
@@ -1277,7 +1276,6 @@ class CyberSecScraper:
                 _raw_text(article.get('title', '')),
                 summary_text,
                 _raw_text(article.get('notes', '')),
-                _raw_text(article.get('contents', '')),
                 tags_text,
                 " ".join(threatactors_list),
                 " ".join(ttps_list),
@@ -1307,12 +1305,40 @@ class CyberSecScraper:
                 f"</article>"
             )
 
-            cards_by_category[primary_category].append(card_html)
+            return {
+                'idx': idx,
+                'card_html': card_html,
+                'primary_category': primary_category,
+                'categories': categories,
+                'source_names': source_names,
+                'fallback_source': fallback_source,
+            }
+
+        build_inputs = list(enumerate(sanitized_articles))
+        if build_inputs:
+            max_workers = min(32, max(1, (os.cpu_count() or 1) * 2))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                card_results = list(executor.map(_prepare_card, build_inputs))
+        else:
+            card_results = []
+
+        for result in card_results:
+            primary_category = result['primary_category']
+            categories = result['categories'] or [primary_category]
+            for cat in categories:
+                if cat not in seen_categories:
+                    seen_categories.add(cat)
+                    category_order.append(cat)
+            if primary_category not in seen_categories:
+                seen_categories.add(primary_category)
+                category_order.append(primary_category)
+            cards_by_category[primary_category].append(result['card_html'])
+            source_names = result['source_names']
             if source_names:
                 for src_name in source_names:
                     sources.add(src_name)
             else:
-                sources.add(fallback_source)
+                sources.add(result['fallback_source'])
 
         available_categories = [cat for cat in category_order if cards_by_category.get(cat)]
 
@@ -1335,7 +1361,7 @@ class CyberSecScraper:
             card_sections.append(section_markup)
 
         cards_markup = "\n        ".join(card_sections) if card_sections else "<p class=\"card-empty\">No articles available yet.</p>"
-        article_count = len(self.articles)
+        article_count = len(sanitized_articles)
         article_count_label = f"{article_count} item{'s' if article_count != 1 else ''}"
 
         sources = sorted(s for s in sources if s)
@@ -1352,7 +1378,7 @@ class CyberSecScraper:
             for category in available_categories
         ) if available_categories else "<p class=\"filter-panel__empty\">No category filters available.</p>"
 
-        articles_json = json.dumps(self.articles, ensure_ascii=False)
+        articles_json = json.dumps(sanitized_articles, ensure_ascii=False)
         articles_json = articles_json.replace('</', '<' + '\\' + '/')
 
         css = """
@@ -1939,33 +1965,17 @@ main {
   color: var(--text-secondary);
 }
 
-.detail-panel__fulltext {
-  padding: clamp(0.9rem, 1vw, 1.15rem);
-  border-radius: 18px;
-  border: 1px solid rgba(51, 65, 85, 0.65);
-  background: rgba(15, 23, 42, 0.7);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.85rem;
-  line-height: 1.7;
-  max-height: 28vh;
-  overflow: auto;
-  white-space: pre-wrap;
-}
-
-.detail-panel__fulltext::-webkit-scrollbar,
 .card-groups::-webkit-scrollbar,
 .card-list::-webkit-scrollbar {
   width: 10px;
 }
 
-.detail-panel__fulltext::-webkit-scrollbar-thumb,
 .card-groups::-webkit-scrollbar-thumb,
 .card-list::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.35);
   border-radius: 999px;
 }
 
-.detail-panel__fulltext::-webkit-scrollbar-track,
 .card-groups::-webkit-scrollbar-track,
 .card-list::-webkit-scrollbar-track {
   background: rgba(15, 23, 42, 0.35);
@@ -1986,9 +1996,6 @@ main {
     padding-bottom: 1.5rem;
   }
 
-  .detail-panel__fulltext {
-    max-height: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2032,8 +2039,7 @@ main {
     iocs: detailPanel.querySelector('[data-detail="iocs"]'),
     ttps: detailPanel.querySelector('[data-detail="TTPs"]'),
     actors: detailPanel.querySelector('[data-detail="ThreatActors"]'),
-    cves: detailPanel.querySelector('[data-detail="CVEs"]'),
-    contents: detailPanel.querySelector('[data-detail="contents"]')
+    cves: detailPanel.querySelector('[data-detail="CVEs"]')
   };
 
   function clearNode(node) {
@@ -2248,7 +2254,6 @@ main {
     renderPills(refs.ttps, article.TTPs, 'No tactics or techniques listed.');
     renderPills(refs.iocs, article.iocs, 'No indicators extracted.');
     renderCves(refs.cves, article.CVEs);
-    setFullText(refs.contents, article.contents, 'No raw content captured for this item.');
   }
 
 
@@ -2584,10 +2589,6 @@ main {
           <section class=\"detail-panel__section\">
             <h3>Analyst notes</h3>
             <p class=\"detail-panel__text\" data-detail=\"notes\"></p>
-          </section>
-          <section class=\"detail-panel__section\">
-            <h3>Full content</h3>
-            <div class=\"detail-panel__fulltext\" data-detail=\"contents\"></div>
           </section>
         </div>
       </div>
