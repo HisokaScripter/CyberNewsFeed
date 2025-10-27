@@ -868,6 +868,23 @@ class CyberSecScraper:
         if not feed_url:
             print(f"Skipping feed {source}: missing URL")
             return
+        if isinstance(feed_meta, str):
+            feed_url = feed_meta
+            requires_tor = ".onion" in (feed_url or "")
+        else:
+            feed_url = feed_meta.get("url") if isinstance(feed_meta, dict) else None
+            requires_tor = bool(feed_meta.get("requires_tor", ".onion" in (feed_url or ""))) if isinstance(feed_meta, dict) else False
+        if not feed_url:
+            print(f"Skipping feed {source}: missing URL")
+            return
+
+        feed = self._parse_feed(feed_url, requires_tor=requires_tor)
+        if getattr(feed, "bozo", False):
+            print(f"Warning: Feed parsing issue detected for {source} ({feed_url}): {getattr(feed, 'bozo_exception', '')}")
+
+        feed = self._parse_feed(feed_url, requires_tor=requires_tor)
+        if getattr(feed, "bozo", False):
+            print(f"Warning: Feed parsing issue detected for {source} ({feed_url}): {getattr(feed, 'bozo_exception', '')}")
 
         feed = self._parse_feed(feed_url, requires_tor=requires_tor)
         if getattr(feed, "bozo", False):
