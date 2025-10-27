@@ -2044,6 +2044,11 @@ main {
     overflow-y: visible;
     padding-right: 0;
   }
+
+  .detail-panel__content {
+    overflow-y: visible;
+    padding-right: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
