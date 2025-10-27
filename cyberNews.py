@@ -746,6 +746,88 @@ class CyberSecScraper:
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()
 
+    def _condense_article_text(self, text, max_chars=6000):
+        """Reduce the amount of text sent to the AI while keeping salient details."""
+        if not text:
+            return ""
+
+        paragraphs = [para.strip() for para in re.split(r"\n{2,}", text) if para.strip()]
+        if not paragraphs:
+            return text[:max_chars]
+
+        keyword_weights = {
+            "cve-": 6,
+            "zero-day": 5,
+            "zeroday": 5,
+            "exploit": 4,
+            "exploitation": 4,
+            "ransomware": 4,
+            "apt": 4,
+            "advanced persistent threat": 4,
+            "backdoor": 3,
+            "malware": 3,
+            "vulnerability": 3,
+            "patch": 2,
+            "mitre": 2,
+            "cisa": 2,
+            "indicator": 2,
+            "ioc": 2,
+        }
+        indicator_patterns = [
+            r"CVE-\d{4}-\d{4,7}",
+            r"(?:[0-9]{1,3}\.){3}[0-9]{1,3}",
+            r"[0-9a-fA-F]{32,}",
+            r"[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+        ]
+
+        scored = []
+        for idx, para in enumerate(paragraphs):
+            lower = para.lower()
+            score = 1.0 + min(len(para), 800) / 800.0  # prefer fuller paragraphs
+            for keyword, weight in keyword_weights.items():
+                if keyword in lower:
+                    score += weight
+            for pattern in indicator_patterns:
+                if re.search(pattern, para, re.IGNORECASE):
+                    score += 2
+            scored.append((idx, score, para))
+
+        # Always include the opening paragraph even if its score is low.
+        mandatory_indices = {0}
+
+        selected = []
+        remaining_chars = max_chars
+
+        for idx, score, para in sorted(scored, key=lambda item: (-item[1], item[0])):
+            if idx in mandatory_indices or remaining_chars > 0:
+                if len(para) <= remaining_chars or idx in mandatory_indices:
+                    selected.append((idx, para))
+                    remaining_chars -= len(para) + 2  # account for spacing
+            if remaining_chars <= 0:
+                break
+
+        if not selected:
+            selected = [(idx, para) for idx, _, para in scored[:3]]
+
+        selected.sort(key=lambda item: item[0])
+        condensed = "\n\n".join(para for _, para in selected)
+
+        if len(condensed) < max_chars and len(condensed) < len(text):
+            # append additional context in chronological order until limit reached
+            used_indices = {idx for idx, _ in selected}
+            for idx, para in enumerate(paragraphs):
+                if idx in used_indices:
+                    continue
+                addition = ("\n\n" if condensed else "") + para
+                if len(condensed) + len(addition) > max_chars:
+                    break
+                condensed += addition
+                used_indices.add(idx)
+
+        if condensed:
+            return condensed[:max_chars].rstrip()
+        return text[:max_chars]
+
     def _extract_full_article_text(self, url, referer=None, existing_text=""):
         if not url:
             return existing_text
@@ -868,23 +950,6 @@ class CyberSecScraper:
         if not feed_url:
             print(f"Skipping feed {source}: missing URL")
             return
-        if isinstance(feed_meta, str):
-            feed_url = feed_meta
-            requires_tor = ".onion" in (feed_url or "")
-        else:
-            feed_url = feed_meta.get("url") if isinstance(feed_meta, dict) else None
-            requires_tor = bool(feed_meta.get("requires_tor", ".onion" in (feed_url or ""))) if isinstance(feed_meta, dict) else False
-        if not feed_url:
-            print(f"Skipping feed {source}: missing URL")
-            return
-
-        feed = self._parse_feed(feed_url, requires_tor=requires_tor)
-        if getattr(feed, "bozo", False):
-            print(f"Warning: Feed parsing issue detected for {source} ({feed_url}): {getattr(feed, 'bozo_exception', '')}")
-
-        feed = self._parse_feed(feed_url, requires_tor=requires_tor)
-        if getattr(feed, "bozo", False):
-            print(f"Warning: Feed parsing issue detected for {source} ({feed_url}): {getattr(feed, 'bozo_exception', '')}")
 
         feed = self._parse_feed(feed_url, requires_tor=requires_tor)
         if getattr(feed, "bozo", False):
@@ -933,8 +998,9 @@ class CyberSecScraper:
 
             ai_payload = {}
             ai_summary_text = ""
+            condensed_body = self._condense_article_text(body)
             try:
-                ai_response = self._summarize(body)
+                ai_response = self._summarize(condensed_body)
                 raw_content = getattr(ai_response, "content", ai_response)
                 if not isinstance(raw_content, str):
                     raw_content = json.dumps(raw_content)
