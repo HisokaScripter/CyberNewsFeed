@@ -1416,7 +1416,8 @@ body {
   color: var(--text-primary);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 header {
@@ -1443,7 +1444,7 @@ main {
   flex-direction: row;
   gap: clamp(1rem, 2vw, 2rem);
   padding: 0 clamp(1.25rem, 3vw, 3rem) clamp(1.5rem, 4vw, 3rem);
-  overflow: hidden;
+  overflow: visible;
   min-height: 0;
 }
 
@@ -1774,6 +1775,10 @@ main {
   padding-bottom: clamp(1rem, 2.5vw, 2rem);
   min-width: 0;
   min-height: 0;
+  position: sticky;
+  top: clamp(1.25rem, 2vw, 2.5rem);
+  height: calc(100vh - clamp(1.25rem, 2vw, 2.5rem) - clamp(1.5rem, 4vw, 3rem));
+  align-self: flex-start;
 }
 
 .detail-panel__surface {
@@ -2024,10 +2029,20 @@ main {
   .detail-panel {
     padding-bottom: 1.5rem;
     min-height: auto;
+    position: static;
+    top: auto;
+    height: auto;
+    align-self: stretch;
   }
 
   .detail-panel__surface {
     max-height: none;
+    height: auto;
+  }
+
+  .detail-panel__content {
+    overflow-y: visible;
+    padding-right: 0;
   }
 
   .detail-panel__content {
