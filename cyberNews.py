@@ -111,7 +111,51 @@ class CyberSecScraper:
         self.Feeds = {
             "The Hacker News": "https://feeds.feedburner.com/TheHackersNews?format=xml",
             "Bleeping Computer": "https://www.bleepingcomputer.com/feed/",
-            "Dark Reading": "https://www.darkreading.com/rss.xml"
+            "Dark Reading": "https://www.darkreading.com/rss.xml",
+            "SecurityWeek": "https://www.securityweek.com/feed/",
+            "Krebs on Security": "https://krebsonsecurity.com/feed/",
+            "Threatpost": "https://threatpost.com/feed/",
+            "SC Media Threats": "https://www.scmagazine.com/rss/category/threats",
+            "CISA Alerts": "https://www.cisa.gov/uscert/ncas/alerts.xml",
+            "CISA Current Activity": "https://www.cisa.gov/uscert/ncas/current-activity.xml",
+            "CISA Bulletins": "https://www.cisa.gov/uscert/ncas/bulletins.xml",
+            "US-CERT Vulnerability Notes": "https://kb.cert.org/vuls/rss/rss.xml",
+            "NVD NIST": "https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml",
+            "Microsoft Security Response Center": "https://msrc-blog.microsoft.com/feed/",
+            "Cisco Talos": "https://blog.talosintelligence.com/feeds/posts/default",
+            "CrowdStrike": "https://www.crowdstrike.com/blog/feed/",
+            "Unit 42": "https://unit42.paloaltonetworks.com/feed/",
+            "Mandiant": "https://www.mandiant.com/resources/blog/rss.xml",
+            "Proofpoint": "https://www.proofpoint.com/us/blog/rss.xml",
+            "Sophos News": "https://news.sophos.com/en-us/feed/",
+            "ESET WeLiveSecurity": "https://www.welivesecurity.com/feed/",
+            "Check Point Research": "https://research.checkpoint.com/feed/",
+            "Rapid7": "https://www.rapid7.com/blog/rss/",
+            "Recorded Future": "https://www.recordedfuture.com/blog/rss",
+            "Bitdefender Labs": "https://www.bitdefender.com/blog/api/rss/labs/",
+            "Google Cloud Security": "https://cloud.google.com/blog/topics/inside-google-cloud/feed",
+            "AWS Security": "https://aws.amazon.com/blogs/security/feed/",
+            "IBM Security Intelligence": "https://securityintelligence.com/feed/",
+            "Naked Security by Sophos": "https://nakedsecurity.sophos.com/feed/",
+            "Fortinet Blog": "https://www.fortinet.com/blog/rss",
+            "Malwarebytes Labs": "https://www.malwarebytes.com/blog/feed",
+            "Trend Micro Research": "https://www.trendmicro.com/vinfo/us/security/rss",
+            "Zero Day Initiative": "https://www.zerodayinitiative.com/blog?format=rss",
+            "Qualys": "https://blog.qualys.com/feed",
+            "VMware Security Advisories": "https://www.vmware.com/security/advisories.xml",
+            "Oracle Critical Patch Updates": "https://www.oracle.com/a/ocom/docs/rss/oracle-critical-patch-updates.xml",
+            "SAP Security Patch Day": "https://wiki.scn.sap.com/wiki/pages/viewrecentblogposts.action?key=266488969",
+            "F5 Security Advisories": "https://support.f5.com/csp/rss/feed.xml",
+            "Juniper Security Advisories": "https://services.netscreen.com/documentation/JuniperNetworksSecurityAdvisories.xml",
+            "Cisco Security Advisories": "https://sec.cloudapps.cisco.com/security/center/psirtrss20/CiscoSecurityAdvisory.xml",
+            "Adobe Security Bulletins": "https://helpx.adobe.com/security/atom.xml",
+            "Google Chrome Releases": "https://chromereleases.googleblog.com/feeds/posts/default",
+            "USENIX Security": "https://www.usenix.org/aggregator/security/feed",
+            "CERT-EU": "https://cert.europa.eu/publico/updates-en.atom",
+            "GovCERT.ch": "https://www.govcert.admin.ch/blog/feed/",
+            "Australian Cyber Security Centre": "https://www.cyber.gov.au/acsc/view-all-content/alerts/rss.xml",
+            "Canadian Centre for Cyber Security": "https://www.cyber.gc.ca/en/rss/advisories-alerts",
+            "ENISA": "https://www.enisa.europa.eu/rss/news"
         }
         self.urls = {
             "Huntress Blog": "https://www.huntress.com/blog"
@@ -350,7 +394,6 @@ class CyberSecScraper:
             print("No articles to save!"); return
 
         filename = datetime.now().strftime('cybersec_news_%Y%m%d_%H%M%S.html')
-        columns = ['source','CVEs','date','notes','article','AI-Summary','iocs','ThreatActors','TTPs','contents','tags']
 
         def _raw_text(value):
             if value is None:
@@ -361,33 +404,688 @@ class CyberSecScraper:
                 return json.dumps(value, ensure_ascii=False)
             return str(value)
 
-        def _fmt_cell(value):
-            return escape(_raw_text(value))
+        def _ensure_list(value):
+            if value is None:
+                return []
+            if isinstance(value, list):
+                return value
+            if isinstance(value, (tuple, set)):
+                return list(value)
+            if isinstance(value, str):
+                parts = [part.strip() for part in value.split(',') if part.strip()]
+                return parts
+            return [value]
 
-        def _wrap_cell(content, raw_text):
-            safe_full = escape(raw_text, quote=True)
-            return (
-                f"<td data-full-text=\"{safe_full}\">"
-                "<div class=\"cell-inner\">"
-                f"<div class=\"cell-content\">{content}</div>"
-                "<button type=\"button\" class=\"expand-button\" title=\"View full content\">View full</button>"
-                "</div>"
-                "</td>"
+        card_rows = []
+        for idx, article in enumerate(self.articles):
+            source_label = escape(_raw_text(article.get('source', 'Unknown Source')) or 'Unknown Source')
+            date_label = escape(_raw_text(article.get('date', '')).strip())
+            summary_text = _raw_text(article.get('AI-Summary', '')).strip()
+            if not summary_text:
+                summary_text = 'No AI summary available yet.'
+            summary_snippet = summary_text if len(summary_text) <= 280 else summary_text[:277].rstrip() + '…'
+            summary_snippet = escape(summary_snippet)
+
+            tags_text = _raw_text(article.get('tags', '')).strip()
+            tags_markup = escape(tags_text) if tags_text else ''
+
+            cve_count = len(_ensure_list(article.get('CVEs')))
+            actor_count = len(_ensure_list(article.get('ThreatActors')))
+            ttp_count = len(_ensure_list(article.get('TTPs')))
+
+            stats = []
+            if cve_count:
+                stats.append(f"<span class=\"feed-card__stat\">CVEs · {cve_count}</span>")
+            if actor_count:
+                stats.append(f"<span class=\"feed-card__stat\">Threat Actors · {actor_count}</span>")
+            if ttp_count:
+                stats.append(f"<span class=\"feed-card__stat\">TTPs · {ttp_count}</span>")
+            if tags_markup:
+                stats.append(f"<span class=\"feed-card__tagline\">{tags_markup}</span>")
+
+            footer_markup = ''.join(stats) if stats else "<span class=\"feed-card__stat feed-card__stat--muted\">No enrichment metadata available</span>"
+
+            card_html = (
+                f"<article class=\"feed-card\" data-index=\"{idx}\" tabindex=\"0\">"
+                f"<div class=\"feed-card__meta\">"
+                f"<span class=\"feed-card__source\">{source_label}</span>"
+                f"<span class=\"feed-card__date\">{date_label}</span>"
+                f"</div>"
+                f"<p class=\"feed-card__summary\">{summary_snippet}</p>"
+                f"<div class=\"feed-card__footer\">{footer_markup}</div>"
+                f"</article>"
             )
+            card_rows.append(card_html)
 
-        table_rows = []
-        for article in self.articles:
-            cells = []
-            for col in columns:
-                value = article.get(col, "")
-                if col == 'article' and value:
-                    safe_url = escape(str(value), quote=True)
-                    content = f"<a href=\"{safe_url}\" target=\"_blank\" rel=\"noopener noreferrer\">{safe_url}</a>"
-                    cell = _wrap_cell(content, _raw_text(value))
-                else:
-                    cell = _wrap_cell(_fmt_cell(value), _raw_text(value))
-                cells.append(cell)
-            table_rows.append(f"<tr>{''.join(cells)}</tr>")
+        cards_markup = "\n        ".join(card_rows)
+        article_count = len(card_rows)
+        article_count_label = f"{article_count} item{'s' if article_count != 1 else ''}"
+
+        articles_json = json.dumps(self.articles, ensure_ascii=False)
+        articles_json = articles_json.replace('</', '<\/')
+
+        css = """
+:root {
+  color-scheme: dark;
+  --surface-primary: #0f172a;
+  --surface-elevated: rgba(30, 41, 59, 0.85);
+  --surface-border: rgba(148, 163, 184, 0.18);
+  --accent: #38bdf8;
+  --accent-muted: rgba(56, 189, 248, 0.18);
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-subtle: #64748b;
+  --font-base: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-base);
+  background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 45%),
+              radial-gradient(circle at 80% 0%, rgba(99, 102, 241, 0.15), transparent 50%),
+              var(--surface-primary);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: clamp(1.25rem, 2vw, 2.5rem) clamp(1.25rem, 4vw, 3rem) 1rem;
+}
+
+.page-title {
+  margin: 0;
+  font-size: clamp(1.65rem, 2.5vw, 2.35rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.page-subtitle {
+  margin-top: 0.35rem;
+  font-size: clamp(0.95rem, 1.5vw, 1.05rem);
+  color: var(--text-secondary);
+  max-width: 70ch;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: clamp(1rem, 2vw, 2rem);
+  padding: 0 clamp(1.25rem, 3vw, 3rem) clamp(1.5rem, 4vw, 3rem);
+  overflow: hidden;
+}
+
+.card-column {
+  flex: 0 0 38%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-right: 1px solid var(--surface-border);
+  padding-right: clamp(1rem, 2vw, 1.5rem);
+}
+
+.card-column__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.card-column__title {
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.card-column__count {
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+}
+
+.card-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: clamp(0.15rem, 1vw, 0.35rem);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.75rem, 1.1vw, 1.15rem);
+}
+
+.feed-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.92));
+  border: 1px solid transparent;
+  border-radius: 18px;
+  padding: clamp(1rem, 2vw, 1.35rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 18px 40px rgba(8, 15, 30, 0.55);
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  outline: none;
+}
+
+.feed-card:hover,
+.feed-card:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-4px);
+  box-shadow: 0 22px 46px rgba(14, 32, 59, 0.55);
+}
+
+.feed-card--active {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.18), rgba(15, 23, 42, 0.92));
+}
+
+.feed-card__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
+}
+
+.feed-card__source {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.feed-card__date {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.feed-card__summary {
+  margin: 0;
+  font-size: clamp(0.95rem, 1.2vw, 1.05rem);
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.feed-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+}
+
+.feed-card__stat {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.feed-card__stat--muted {
+  background: rgba(51, 65, 85, 0.35);
+  color: var(--text-subtle);
+}
+
+.feed-card__tagline {
+  font-size: 0.75rem;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detail-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: clamp(1rem, 2.5vw, 2rem);
+  min-width: 0;
+}
+
+.detail-panel__surface {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.7));
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  padding: clamp(1.25rem, 2vw, 2rem);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.25rem, 1.5vw, 1.75rem);
+  height: 100%;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.05);
+}
+
+.detail-panel__placeholder {
+  margin: auto;
+  text-align: center;
+  max-width: 32ch;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.detail-panel__content {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.25rem, 1.6vw, 1.85rem);
+  overflow: hidden;
+  flex: 1;
+}
+
+.detail-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.detail-panel__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.detail-panel__source {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.detail-panel__date {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-panel__link {
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(56, 189, 248, 0.16);
+  color: var(--accent);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.detail-panel__link:hover,
+.detail-panel__link:focus-visible {
+  background: rgba(56, 189, 248, 0.35);
+  color: #0f172a;
+  border-color: rgba(56, 189, 248, 0.55);
+  outline: none;
+}
+
+.detail-panel__link.is-disabled {
+  pointer-events: none;
+  opacity: 0.45;
+  border-color: rgba(148, 163, 184, 0.25);
+  background: rgba(51, 65, 85, 0.35);
+  color: var(--text-secondary);
+}
+
+.detail-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.detail-panel__section h2,
+.detail-panel__section h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.detail-panel__text {
+  margin: 0;
+  font-size: clamp(0.95rem, 1.15vw, 1.05rem);
+  line-height: 1.75;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.detail-panel__pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.detail-panel__pill {
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.detail-panel__empty {
+  font-size: 0.82rem;
+  color: var(--text-subtle);
+  font-style: italic;
+}
+
+.detail-panel__cve-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.detail-panel__cve {
+  padding: 0.65rem 0.75rem;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(30, 41, 59, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.detail-panel__cve-id {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.detail-panel__cve-meta,
+.detail-panel__cve-mitre {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.detail-panel__fulltext {
+  padding: clamp(0.9rem, 1vw, 1.15rem);
+  border-radius: 18px;
+  border: 1px solid rgba(51, 65, 85, 0.65);
+  background: rgba(15, 23, 42, 0.7);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  max-height: 28vh;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.detail-panel__fulltext::-webkit-scrollbar,
+.card-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.detail-panel__fulltext::-webkit-scrollbar-thumb,
+.card-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
+
+.detail-panel__fulltext::-webkit-scrollbar-track,
+.card-list::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.35);
+}
+
+@media (max-width: 1080px) {
+  main {
+    flex-direction: column;
+    padding: 0 clamp(1rem, 4vw, 2rem) clamp(1.5rem, 4vw, 3rem);
+  }
+
+  .card-column {
+    flex: 1 1 auto;
+    max-width: none;
+    border-right: none;
+    border-bottom: 1px solid var(--surface-border);
+    padding-right: 0;
+    padding-bottom: 1.5rem;
+  }
+
+  .detail-panel__fulltext {
+    max-height: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}
+        """.strip()
+
+        js = """
+(function() {
+  const dataNode = document.getElementById('article-data');
+  if (!dataNode) {
+    return;
+  }
+  let articles = [];
+  try {
+    articles = JSON.parse(dataNode.textContent || '[]');
+  } catch (error) {
+    console.error('Unable to parse article payload:', error);
+    return;
+  }
+
+  const cards = Array.from(document.querySelectorAll('.feed-card'));
+  const detailPanel = document.querySelector('.detail-panel');
+  if (!detailPanel) {
+    return;
+  }
+  const placeholder = detailPanel.querySelector('.detail-panel__placeholder');
+  const content = detailPanel.querySelector('.detail-panel__content');
+
+  const refs = {
+    source: detailPanel.querySelector('[data-detail="source"]'),
+    date: detailPanel.querySelector('[data-detail="date"]'),
+    link: detailPanel.querySelector('[data-detail="article"]'),
+    summary: detailPanel.querySelector('[data-detail="AI-Summary"]'),
+    notes: detailPanel.querySelector('[data-detail="notes"]'),
+    iocs: detailPanel.querySelector('[data-detail="iocs"]'),
+    ttps: detailPanel.querySelector('[data-detail="TTPs"]'),
+    actors: detailPanel.querySelector('[data-detail="ThreatActors"]'),
+    cves: detailPanel.querySelector('[data-detail="CVEs"]'),
+    contents: detailPanel.querySelector('[data-detail="contents"]')
+  };
+
+  function clearNode(node) {
+    if (!node) {
+      return;
+    }
+    while (node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+  }
+
+  function ensureArray(value) {
+    if (Array.isArray(value)) {
+      return value.filter((item) => item !== null && item !== undefined && item !== '');
+    }
+    if (value === null || value === undefined || value === '') {
+      return [];
+    }
+    return [value];
+  }
+
+  function createPill(text) {
+    const pill = document.createElement('span');
+    pill.className = 'detail-panel__pill';
+    pill.textContent = text;
+    return pill;
+  }
+
+  function renderPills(container, values, emptyLabel) {
+    if (!container) {
+      return;
+    }
+    clearNode(container);
+    const items = ensureArray(values);
+    if (!items.length) {
+      const empty = document.createElement('span');
+      empty.className = 'detail-panel__empty';
+      empty.textContent = emptyLabel;
+      container.appendChild(empty);
+      return;
+    }
+    items.forEach((item) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const pill = createPill(Object.values(item).join(' · '));
+        container.appendChild(pill);
+      } else {
+        const pill = createPill(String(item));
+        container.appendChild(pill);
+      }
+    });
+  }
+
+  function renderCves(container, values) {
+    if (!container) {
+      return;
+    }
+    clearNode(container);
+    const items = ensureArray(values);
+    if (!items.length) {
+      const empty = document.createElement('li');
+      empty.className = 'detail-panel__empty';
+      empty.textContent = 'No CVEs reported.';
+      container.appendChild(empty);
+      return;
+    }
+    items.forEach((entry) => {
+      const item = document.createElement('li');
+      item.className = 'detail-panel__cve';
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+        const id = document.createElement('div');
+        id.className = 'detail-panel__cve-id';
+        id.textContent = entry.cve || 'Unknown CVE';
+        item.appendChild(id);
+
+        const metaBits = [];
+        if (entry.cvss || entry.cvss === 0) {
+          metaBits.push(`CVSS ${entry.cvss}`);
+        }
+        if (typeof entry.exploited === 'boolean') {
+          metaBits.push(entry.exploited ? 'Exploited' : 'Not confirmed exploited');
+        }
+        if (typeof entry.patch_available === 'boolean') {
+          metaBits.push(entry.patch_available ? 'Patch available' : 'Patch unavailable');
+        }
+        if (entry.weaponization_stage) {
+          metaBits.push(entry.weaponization_stage);
+        }
+        if (metaBits.length) {
+          const meta = document.createElement('div');
+          meta.className = 'detail-panel__cve-meta';
+          meta.textContent = metaBits.join(' • ');
+          item.appendChild(meta);
+        }
+        if (Array.isArray(entry.mapped_mitre_ids) && entry.mapped_mitre_ids.length) {
+          const mitre = document.createElement('div');
+          mitre.className = 'detail-panel__cve-mitre';
+          mitre.textContent = `MITRE: ${entry.mapped_mitre_ids.join(', ')}`;
+          item.appendChild(mitre);
+        }
+      } else {
+        item.textContent = String(entry);
+      }
+      container.appendChild(item);
+    });
+  }
+
+  function setText(node, value, fallback) {
+    if (!node) {
+      return;
+    }
+    const text = value === null || value === undefined || String(value).trim() === '' ? fallback : String(value);
+    node.textContent = text;
+  }
+
+  function setFullText(node, value, fallback) {
+    if (!node) {
+      return;
+    }
+    if (value === null || value === undefined || String(value).trim() === '') {
+      node.textContent = fallback;
+    } else {
+      node.textContent = String(value);
+    }
+  }
+
+  function updateDetail(article) {
+    if (!article) {
+      return;
+    }
+    if (placeholder) {
+      placeholder.style.display = 'none';
+    }
+    if (content) {
+      content.hidden = false;
+    }
+    setText(refs.source, article.source || 'Unknown source', 'Unknown source');
+    setText(refs.date, article.date || '', 'Date unavailable');
+    if (refs.link) {
+      const href = article.article || '';
+      if (href) {
+        refs.link.href = href;
+        refs.link.classList.remove('is-disabled');
+        refs.link.textContent = 'Open original article';
+      } else {
+        refs.link.removeAttribute('href');
+        refs.link.classList.add('is-disabled');
+        refs.link.textContent = 'Link unavailable';
+      }
+    }
+    setFullText(refs.summary, article['AI-Summary'], 'No AI summary available.');
+    setFullText(refs.notes, article.notes, 'No analyst notes provided.');
+    renderPills(refs.actors, article.ThreatActors, 'No threat actors identified.');
+    renderPills(refs.ttps, article.TTPs, 'No tactics or techniques listed.');
+    renderPills(refs.iocs, article.iocs, 'No indicators extracted.');
+    renderCves(refs.cves, article.CVEs);
+    setFullText(refs.contents, article.contents, 'No raw content captured for this item.');
+  }
+
+  let activeCard = null;
+  function selectCard(card) {
+    if (!card) {
+      return;
+    }
+    if (activeCard) {
+      activeCard.classList.remove('feed-card--active');
+    }
+    activeCard = card;
+    activeCard.classList.add('feed-card--active');
+    const index = Number(card.getAttribute('data-index'));
+    const article = Number.isFinite(index) ? articles[index] : null;
+    updateDetail(article);
+  }
+
+  cards.forEach((card) => {
+    card.addEventListener('click', () => selectCard(card));
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectCard(card);
+      }
+    });
+  });
+
+  if (cards.length) {
+    selectCard(cards[0]);
+  }
+})();
+        """.strip()
 
         html_doc = f"""<!DOCTYPE html>
 <html lang=\"en\">
@@ -395,292 +1093,82 @@ class CyberSecScraper:
   <meta charset=\"utf-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
   <title>Cybersecurity News Feed</title>
-  <link rel=\"stylesheet\" href=\"https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css\">
   <style>
-    body {{ font-family: Arial, sans-serif; padding: 1.5rem; background: #0f172a; color: #e2e8f0; }}
-    h1 {{ text-align: center; margin-bottom: 1.5rem; }}
-    table.dataTable {{ border-collapse: collapse; width: 100%; table-layout: fixed; }}
-    table.dataTable thead th {{ background: #1e293b; color: #f8fafc; }}
-    table.dataTable tbody tr:nth-child(odd) {{ background: #1e293b; }}
-    table.dataTable tbody tr:nth-child(even) {{ background: #0f172a; }}
-    table.dataTable tbody td {{
-      color: #e2e8f0;
-      vertical-align: top;
-      position: relative;
-    }}
-    table.dataTable thead th {{
-      position: relative;
-      user-select: none;
-    }}
-    .cell-inner {{
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      position: relative;
-    }}
-    .cell-content {{
-      max-height: 150px;
-      overflow: hidden;
-      padding-right: 0.5rem;
-      display: block;
-      line-height: 1.4;
-      position: relative;
-    }}
-    .cell-content::after {{
-      content: "";
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 24px;
-      background: linear-gradient(to bottom, rgba(15, 23, 42, 0) 0%, rgba(15, 23, 42, 0.95) 100%);
-      pointer-events: none;
-    }}
-    td:not(.is-truncated) .cell-content::after {{
-      display: none;
-    }}
-    td, th {{
-      width: 220px;
-      max-width: 500px;
-      overflow: hidden;
-    }}
-    .expand-button {{
-      display: none;
-      align-self: flex-end;
-      background: #38bdf8;
-      color: #0f172a;
-      border: none;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      padding: 0.35rem 0.9rem;
-      cursor: pointer;
-      font-weight: 600;
-      transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
-    }}
-    .expand-button:hover,
-    .expand-button:focus {{
-      background: #0ea5e9;
-      color: #f8fafc;
-      outline: none;
-    }}
-    td.is-truncated .expand-button {{
-      display: inline-flex;
-    }}
-    .detail-modal {{
-      position: fixed;
-      inset: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }}
-    .detail-modal.is-visible {{
-      display: flex;
-    }}
-    .detail-modal__backdrop {{
-      position: absolute;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.85);
-    }}
-    .detail-modal__dialog {{
-      position: relative;
-      background: #0f172a;
-      color: #e2e8f0;
-      border-radius: 0.75rem;
-      padding: 1.5rem;
-      max-width: min(960px, 90vw);
-      max-height: min(720px, 90vh);
-      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.7);
-      overflow: hidden;
-    }}
-    .detail-modal__dialog h2 {{
-      margin-top: 0;
-      margin-bottom: 1rem;
-    }}
-    .detail-modal__content {{
-      background: #1e293b;
-      border-radius: 0.75rem;
-      padding: 1rem;
-      margin: 0;
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: calc(90vh - 6rem);
-      overflow: auto;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    }}
-    .detail-modal__close {{
-      position: absolute;
-      top: 0.75rem;
-      right: 0.75rem;
-      border: none;
-      background: transparent;
-      color: #94a3b8;
-      font-size: 1.75rem;
-      line-height: 1;
-      cursor: pointer;
-      padding: 0.25rem;
-    }}
-    .detail-modal__close:hover,
-    .detail-modal__close:focus {{
-      color: #e2e8f0;
-      outline: none;
-    }}
-    .column-resizer {{
-      position: absolute;
-      top: 0;
-      right: 0;
-      width: 6px;
-      cursor: col-resize;
-      user-select: none;
-      height: 100%;
-    }}
-    .column-resizer::after {{
-      content: "";
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 2px;
-      width: 2px;
-      background: rgba(148, 163, 184, 0.5);
-      opacity: 0;
-      transition: opacity 0.2s ease-in-out;
-    }}
-    th:hover .column-resizer::after {{
-      opacity: 1;
-    }}
-    a {{ color: #38bdf8; }}
+{css}
   </style>
 </head>
 <body>
-  <h1>Cybersecurity News Feed</h1>
-  <table id=\"cyber-news\" class=\"display\">
-    <thead>
-      <tr>{''.join(f'<th>{escape(col)}</th>' for col in columns)}</tr>
-    </thead>
-    <tbody>
-      {''.join(table_rows)}
-    </tbody>
-  </table>
-  <div id=\"detail-modal\" class=\"detail-modal\" role=\"dialog\" aria-modal=\"true\" aria-hidden=\"true\" tabindex=\"-1\">
-    <div class=\"detail-modal__backdrop\" data-close-modal></div>
-    <div class=\"detail-modal__dialog\">
-      <button type=\"button\" class=\"detail-modal__close\" aria-label=\"Close\" data-close-modal>&times;</button>
-      <h2>Full Entry</h2>
-      <pre class=\"detail-modal__content\"></pre>
-    </div>
-  </div>
-  <script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script>
-  <script src=\"https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js\"></script>
+  <header>
+    <h1 class=\"page-title\">Cybersecurity Intelligence Briefing</h1>
+    <p class=\"page-subtitle\">Review AI-powered digests of the latest security headlines. Select a card to reveal the enriched intelligence, indicators, and primary source material.</p>
+  </header>
+  <main>
+    <section class=\"card-column\" aria-label=\"Summarised articles\">
+      <div class=\"card-column__header\">
+        <span class=\"card-column__title\">AI summaries</span>
+        <span class=\"card-column__count\">{article_count_label}</span>
+      </div>
+      <div class=\"card-list\">
+        {cards_markup}
+      </div>
+    </section>
+    <aside class=\"detail-panel\" aria-live=\"polite\" aria-label=\"Article detail\">
+      <div class=\"detail-panel__surface\">
+        <div class=\"detail-panel__placeholder\">
+          <p>Select a summary on the left to explore full intelligence, enrichment data, and source material.</p>
+        </div>
+        <div class=\"detail-panel__content\" hidden>
+          <div class=\"detail-panel__header\">
+            <div class=\"detail-panel__meta\">
+              <span class=\"detail-panel__source\" data-detail=\"source\"></span>
+              <span class=\"detail-panel__date\" data-detail=\"date\"></span>
+            </div>
+            <a class=\"detail-panel__link\" data-detail=\"article\" target=\"_blank\" rel=\"noopener noreferrer\">Open original article</a>
+          </div>
+          <section class=\"detail-panel__section\">
+            <h2>AI summary</h2>
+            <p class=\"detail-panel__text\" data-detail=\"AI-Summary\"></p>
+          </section>
+          <section class=\"detail-panel__section\">
+            <h3>Threat actors</h3>
+            <div class=\"detail-panel__pill-list\" data-detail=\"ThreatActors\"></div>
+          </section>
+          <section class=\"detail-panel__section\">
+            <h3>Techniques &amp; procedures</h3>
+            <div class=\"detail-panel__pill-list\" data-detail=\"TTPs\"></div>
+          </section>
+          <section class=\"detail-panel__section\">
+            <h3>Indicators of compromise</h3>
+            <div class=\"detail-panel__pill-list\" data-detail=\"iocs\"></div>
+          </section>
+          <section class=\"detail-panel__section\">
+            <h3>CVEs</h3>
+            <ul class=\"detail-panel__cve-list\" data-detail=\"CVEs\"></ul>
+          </section>
+          <section class=\"detail-panel__section\">
+            <h3>Analyst notes</h3>
+            <p class=\"detail-panel__text\" data-detail=\"notes\"></p>
+          </section>
+          <section class=\"detail-panel__section\">
+            <h3>Full content</h3>
+            <div class=\"detail-panel__fulltext\" data-detail=\"contents\"></div>
+          </section>
+        </div>
+      </div>
+    </aside>
+  </main>
+  <script id=\"article-data\" type=\"application/json\">{articles_json}</script>
   <script>
-    $(document).ready(function() {{
-      const table = $('#cyber-news').DataTable({{
-        pageLength: 25,
-        order: [[2, 'desc']],
-        responsive: true,
-        autoWidth: false
-      }});
-
-      const $modal = $('#detail-modal');
-      const $modalContent = $modal.find('.detail-modal__content');
-      let previousFocus = null;
-
-      function openModal(text) {{
-        if (!text) {{
-          return;
-        }}
-        previousFocus = document.activeElement;
-        $modalContent.text(text);
-        $modal.attr('aria-hidden', 'false').addClass('is-visible');
-        $modal.focus();
-      }}
-
-      function closeModal() {{
-        $modal.attr('aria-hidden', 'true').removeClass('is-visible');
-        $modalContent.text('');
-        if (previousFocus && typeof previousFocus.focus === 'function') {{
-          previousFocus.focus();
-        }}
-        previousFocus = null;
-      }}
-
-      function markOverflowCells() {{
-        $('#cyber-news tbody td').each(function() {{
-          const content = $(this).find('.cell-content')[0];
-          if (!content) {{
-            return;
-          }}
-          const isOverflowing = content.scrollHeight - content.clientHeight > 1;
-          $(this).toggleClass('is-truncated', isOverflowing);
-        }});
-      }}
-
-      markOverflowCells();
-      table.on('draw.dt', markOverflowCells);
-
-      function setColumnWidth(index, width) {{
-        const widthPx = `${{Math.max(width, 120)}}px`;
-        $(table.column(index).header()).css('width', widthPx);
-        table.column(index).nodes().to$().css('width', widthPx);
-      }}
-
-      table.columns().every(function(index) {{
-        const header = $(this.header());
-        const initialWidth = header.outerWidth() || 220;
-        setColumnWidth(index, initialWidth);
-        const resizer = $('<span class="column-resizer" title="Drag to resize"></span>');
-        header.append(resizer);
-
-        resizer.on('mousedown', function(event) {{
-          event.preventDefault();
-          event.stopPropagation();
-          const startX = event.pageX;
-          const startWidth = header.outerWidth();
-
-          $(document).on('mousemove.columnResize', function(moveEvent) {{
-            const delta = moveEvent.pageX - startX;
-            setColumnWidth(index, startWidth + delta);
-          }});
-
-          $(document).on('mouseup.columnResize', function() {{
-            $(document).off('.columnResize');
-            markOverflowCells();
-          }});
-        }});
-      }});
-
-      $('#cyber-news tbody').on('click', '.expand-button', function(event) {{
-        event.preventDefault();
-        event.stopPropagation();
-        const fullText = $(this).closest('td').data('full-text') || '';
-        openModal(fullText);
-      }});
-
-      $('#cyber-news tbody').on('dblclick', 'td', function(event) {{
-        if ($(event.target).is('a, button')) {{
-          return;
-        }}
-        const fullText = $(this).data('full-text') || '';
-        openModal(fullText);
-      }});
-
-      $modal.on('click', '[data-close-modal]', function(event) {{
-        event.preventDefault();
-        closeModal();
-      }});
-
-      $(document).on('keydown', function(event) {{
-        if (event.key === 'Escape' && $modal.hasClass('is-visible')) {{
-          closeModal();
-        }}
-      }});
-    }});
+{js}
   </script>
 </body>
 </html>
 """
+
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(html_doc)
         print(f"✓ Saved to {filename}")
+
 
     def save_to_json(self, filename='cybersec_news.json'):
         if not self.articles:
