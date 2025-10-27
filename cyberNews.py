@@ -41,6 +41,7 @@ class CyberSecScraper:
             "summary": string,
             "iocs": [string] | null,
             "ttps": [string] | null,
+            "tags": [string] | null,
             "threat_actors": [string (Name:Country)] | null,
             "cves": [
                 {
@@ -68,6 +69,7 @@ class CyberSecScraper:
 
             Rules:
             - If data is missing, use null or empty array/string.
+            - Populate "tags" with 3-8 concise topical labels when possible (null if none).
             - Confidence must reflect extraction certainty (0–1).
             - Ensure valid JSON format with double quotes, no trailing commas, and no explanation text.
         """
@@ -92,40 +94,6 @@ class CyberSecScraper:
             "Ransomware",
             "APT Activity",
             "General",
-        ]
-        self.KeyWords = [
-            " cybersecurity ", " infosec ", " cyber attack ", " threat ", " exploit ", " vulnerability ",
-            " patch ", " malware ", " ransomware ", " phishing ", " spyware ", " trojan ", " botnet ",
-            " data breach ", " encryption ", " zero-day ", " zero day ", " backdoor ", " payload ", " IOC ", " MITRE ",
-            " CVE ", " CISA ", " alert ", " exposure ",
-            " APT ", " nation-state ", " Lazarus ", " Sandworm ", " FIN7 ", " UNC ", " TA ", " threat actor ",
-            " campaign ", " TTP ", " C2 ", " beacon ", " exfiltration ", " persistence ",
-            " lateral movement ", " initial access ", " privilege escalation ", " defense evasion ",
-            " forensics ", " incident response ", " timeline ", " volatile data ", " triage ", " memory dump ",
-            " prefetch ", " SRUM ", " jumplist ", " shellbags ", " MFT ", " registry ", " evidence ",
-            " acquisition ", " imaging ", " chain of custody ", " analysis ", " SIEM ", " Sentinel ",
-            " Splunk ", " Volatility ", " forensic artifact ", " log analysis ", " timeline reconstruction ",
-            " SOC ", " detection ", " logging ", " EDR ", " XDR ", " MDR ", " alerting ", " correlation ",
-            " automation ", " SOAR ", " endpoint ", " network ", " firewall ", " IDS ", " IPS ", " honeypot ",
-            " defender ", " sentinelone ", " crowdstrike ", " elastic ", " detection rule ", " telemetry ",
-            " PoC ", " RCE ", " LPE ", " buffer overflow ", " injection ", " CVSS ",
-            " patch Tuesday ", " Metasploit ", " fuzzing ", " sandbox ", " patch management ",
-            " bug bounty ", " responsible disclosure ", " vulnerability research ",
-            " reverse engineering ", " disassembly ", " static analysis ", " dynamic analysis ", " IDA Pro ",
-            " Ghidra ", " strings ", " yara ", " unpacking ", " obfuscation ", " deobfuscation ",
-            " C2 traffic ", " command and control ", " API hooking ", " process injection ", " PE file ",
-            " persistence mechanism ", " malware family ", " unpacker ", " signature ", " behavioral analysis ",
-            " pentest ", " penetration test ", " red team ", " blue team ", " purple team ", " recon ",
-            " enumeration ", " Cobalt Strike ", " mimikatz ", " bloodhound ", " nmap ", " burpsuite ",
-            " phishing campaign ", " attack simulation ", " adversary emulation ", " foothold ", " post exploitation ",
-            " packet capture ", " Wireshark ", " DNS ", " HTTPS ", " TLS ", " MITM ", " VPN ", " cloud ",
-            " AWS ", " Azure ", " GCP ", " Kubernetes ", " Docker ", " IAM ", " zero trust ", " SASE ",
-            " compliance ", " NIST ", " ISO ", " CIS ", " SOC2 ", " audit ", " GDPR ", " HIPAA ", " CCPA ",
-            " DORA ", " policy ", " standard ", " regulation ", " procedure ", " risk management ",
-            " AI ", " LLM ", " machine learning ", " adversarial ML ", " prompt injection ", " supply chain attack ",
-            " #MITRE ", " #CVE ", " #TTP ", " #IOC ", " #APTGroup ", " #ThreatIntel ", " #Ransomware ",
-            " #Malware ", " #Exploit ", " #DFIR ", " #Detection ", " #CloudSecurity ", " #AIThreats ",
-            " #Policy ", " #Compliance ", " #Phishing ", " #SOC ", " #IncidentResponse "
         ]
         self.Feeds = {
             "The Hacker News": {"url": "https://feeds.feedburner.com/TheHackersNews?format=xml"},
@@ -848,20 +816,6 @@ class CyberSecScraper:
                 return value
         return ""
 
-    def _tag(self, title, body):
-        hay = f" {title.lower()} \n {body.lower()} "
-        found = [k for k in self.KeyWords if k.strip().lower() in hay]
-        seen = set()
-        out = []
-        for k in found:
-            cleaned = k.strip()
-            key = cleaned.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(cleaned)
-        return " | ".join(out)
-
     def maybe_fetch_html(self, url, referer=None, max_attempts=3, debug=False):
         if not url:
             return None
@@ -914,6 +868,19 @@ class CyberSecScraper:
         if not feed_url:
             print(f"Skipping feed {source}: missing URL")
             return
+        if isinstance(feed_meta, str):
+            feed_url = feed_meta
+            requires_tor = ".onion" in (feed_url or "")
+        else:
+            feed_url = feed_meta.get("url") if isinstance(feed_meta, dict) else None
+            requires_tor = bool(feed_meta.get("requires_tor", ".onion" in (feed_url or ""))) if isinstance(feed_meta, dict) else False
+        if not feed_url:
+            print(f"Skipping feed {source}: missing URL")
+            return
+
+        feed = self._parse_feed(feed_url, requires_tor=requires_tor)
+        if getattr(feed, "bozo", False):
+            print(f"Warning: Feed parsing issue detected for {source} ({feed_url}): {getattr(feed, 'bozo_exception', '')}")
 
         feed = self._parse_feed(feed_url, requires_tor=requires_tor)
         if getattr(feed, "bozo", False):
@@ -1013,7 +980,9 @@ class CyberSecScraper:
             print("CVEs: ", cves)
             print("Notes: ", notes)
             print("Source: ", link)
-            tags = self._tag(title, body + "\n" + ai_summary_text)
+            tags_payload = ai_payload.get("tags")
+            tags = self._normalise_tags(tags_payload)
+            print("Tags: ", tags_payload)
 
             categories = self._categorize_article(title, ai_summary_text, body, tags, cves, threatactors)
 
