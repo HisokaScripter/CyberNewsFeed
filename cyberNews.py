@@ -70,10 +70,13 @@ class CyberSecScraper:
             - Ensure valid JSON format with double quotes, no trailing commas, and no explanation text.
         """
         self.aiModel = "qwen/qwen3-4b-2507"
-        self.articles = []
         base_dir = Path(__file__).resolve().parent
+        self.data_file = base_dir / "cybersec_news.json"
+        self.html_output_file = base_dir / "index.html"
+        self.articles = []
         self.parsed_articles_file = base_dir / "ParsedArticles.txt"
         self.parsed_articles = self._load_parsed_articles()
+        self._load_existing_articles()
         self.KeyWords = [
             " cybersecurity ", " infosec ", " cyber attack ", " threat ", " exploit ", " vulnerability ",
             " patch ", " malware ", " ransomware ", " phishing ", " spyware ", " trojan ", " botnet ",
@@ -197,6 +200,32 @@ class CyberSecScraper:
             print(f"Warning: Could not read parsed articles file: {exc}")
         return parsed
 
+    def _load_existing_articles(self):
+        if not self.data_file.exists():
+            return
+        try:
+            with self.data_file.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as exc:
+            print(f"Warning: Could not load existing articles: {exc}")
+            return
+
+        if not isinstance(data, list):
+            print("Warning: Existing article store is not a list – ignoring contents.")
+            return
+
+        self.articles = data
+        print(f"Loaded {len(self.articles)} articles from {self.data_file}")
+
+        for article in self.articles:
+            identifier = self._article_identifier(
+                article.get("source"),
+                article.get("title"),
+                article.get("article") or article.get("link"),
+            )
+            if identifier and identifier not in self.parsed_articles:
+                self._record_parsed_article(identifier)
+
     def _article_identifier(self, source, title, link):
         if link:
             return link.strip()
@@ -213,6 +242,13 @@ class CyberSecScraper:
                 f.write(identifier + "\n")
         except Exception as exc:
             print(f"Warning: Could not update parsed articles file: {exc}")
+
+    def _persist_progress(self):
+        try:
+            self.save_to_json()
+            self.save_to_html()
+        except Exception as exc:
+            print(f"Warning: Could not persist progress: {exc}")
 
     def _summarize(self, text):
         model = lms.llm(self.aiModel)
@@ -428,6 +464,7 @@ class CyberSecScraper:
                 })
             if identifier:
                 self._record_parsed_article(identifier)
+            self._persist_progress()
             self._sleep()
 
     def scrape_TheHackerNews(self):    self.ingest_feed("The Hacker News")
@@ -463,11 +500,12 @@ class CyberSecScraper:
             writer.writeheader(); writer.writerows(self.articles)
         print(f"✓ Saved to {filename}")
 
-    def save_to_html(self):
+    def save_to_html(self, filename=None):
         if not self.articles:
             print("No articles to save!"); return
 
-        filename = datetime.now().strftime('cybersec_news_%Y%m%d_%H%M%S.html')
+        target = Path(filename) if filename else self.html_output_file
+        target.parent.mkdir(parents=True, exist_ok=True)
 
         def _raw_text(value):
             if value is None:
@@ -1258,17 +1296,19 @@ main {
 </html>
 """
 
-        with open(filename, 'w', encoding='utf-8') as f:
+        with target.open('w', encoding='utf-8') as f:
             f.write(html_doc)
-        print(f"✓ Saved to {filename}")
+        print(f"✓ Saved HTML to {target}")
 
 
-    def save_to_json(self, filename='cybersec_news.json'):
+    def save_to_json(self, filename=None):
         if not self.articles:
             print("No articles to save!"); return
-        with open(filename, 'w', encoding='utf-8') as f:
+        target = Path(filename) if filename else self.data_file
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open('w', encoding='utf-8') as f:
             json.dump(self.articles, f, indent=2, ensure_ascii=False)
-        print(f"✓ Saved to {filename}")
+        print(f"✓ Saved JSON to {target}")
 
     def print_summary(self):
         if not self.articles:
