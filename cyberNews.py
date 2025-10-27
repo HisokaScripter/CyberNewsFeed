@@ -77,6 +77,8 @@ class CyberSecScraper:
         self.parsed_articles_file = base_dir / "ParsedArticles.txt"
         self.parsed_articles = self._load_parsed_articles()
         self._load_existing_articles()
+        self.html_update_interval = 10
+        self._articles_since_html = 0
         self.KeyWords = [
             " cybersecurity ", " infosec ", " cyber attack ", " threat ", " exploit ", " vulnerability ",
             " patch ", " malware ", " ransomware ", " phishing ", " spyware ", " trojan ", " botnet ",
@@ -243,12 +245,62 @@ class CyberSecScraper:
         except Exception as exc:
             print(f"Warning: Could not update parsed articles file: {exc}")
 
-    def _persist_progress(self):
+    def _persist_progress(self, force_html=False):
         try:
             self.save_to_json()
-            self.save_to_html()
+            if force_html or not self.html_output_file.exists():
+                self.save_to_html()
+                self._articles_since_html = 0
+                return
+
+            self._articles_since_html += 1
+            if self._articles_since_html >= self.html_update_interval:
+                self.save_to_html()
+                self._articles_since_html = 0
         except Exception as exc:
             print(f"Warning: Could not persist progress: {exc}")
+
+    def _categorize_article(self, title, summary, body, tags, cves, actors):
+        text_blobs = [title or "", summary or "", body or "", tags or ""]
+        haystack = " ".join(text_blobs).lower()
+        categories = []
+
+        if any(keyword in haystack for keyword in ("zero day", "zero-day", "0day", "0-day", "zeroday")):
+            categories.append("Zero Day")
+
+        if any(keyword in haystack for keyword in (
+            "actively exploited", "active exploitation", "exploited in the wild",
+            "in the wild", "being exploited", "active attack", "exploitation ongoing"
+        )):
+            categories.append("Active Exploitation")
+
+        if cves or "cve" in haystack or "vulnerab" in haystack:
+            categories.append("Vulnerabilities")
+
+        if "ransomware" in haystack:
+            categories.append("Ransomware")
+
+        actor_tokens = [actor.lower() for actor in actors or []]
+        if any(
+            token.startswith("apt") or "advanced persistent threat" in token or token in haystack
+            for token in actor_tokens
+        ) or any(keyword in haystack for keyword in (
+            "nation-state", "lazarus", "sandworm", "fin", "unc", "threat actor"
+        )):
+            categories.append("APT Activity")
+
+        # Ensure uniqueness and stable order
+        seen = set()
+        ordered = []
+        for category in categories:
+            if category not in seen:
+                seen.add(category)
+                ordered.append(category)
+
+        if not ordered:
+            ordered.append("General")
+
+        return ordered
 
     def _summarize(self, text):
         model = lms.llm(self.aiModel)
@@ -448,6 +500,9 @@ class CyberSecScraper:
             print("Source: ", link)
             tags = self._tag(title, body + "\n" + ai_summary_text)
 
+            categories = self._categorize_article(title, ai_summary_text, body, tags, cves, threatactors)
+            primary_category = categories[0] if categories else "General"
+
             self.articles.append({
                     "source": source,
                     "title": title,
@@ -460,7 +515,9 @@ class CyberSecScraper:
                     "ThreatActors": threatactors,
                     "TTPs": ttps,
                     "contents": body,
-                    "tags": tags
+                    "tags": tags,
+                    "categories": categories,
+                    "primary_category": primary_category
                 })
             if identifier:
                 self._record_parsed_article(identifier)
@@ -478,6 +535,7 @@ class CyberSecScraper:
                 self.ingest_feed(source)
             except Exception as exc:
                 print(f"Error ingesting {source}: {exc}")
+        self._persist_progress(force_html=True)
         print(f"\n✓ Total articles scraped: {len(self.articles)}")
         return self.articles
 
@@ -528,9 +586,41 @@ class CyberSecScraper:
                 return parts
             return [value]
 
-        card_rows = []
+        def _slugify(value):
+            value = (value or "").strip().lower()
+            if not value:
+                return "general"
+            slug = "".join(ch if ch.isalnum() else "-" for ch in value)
+            slug = "-".join(part for part in slug.split("-") if part)
+            return slug or "general"
+
+        def _attr(value):
+            if value is None:
+                return ""
+            return escape(str(value), quote=True)
+
+        category_seed = [
+            "Zero Day",
+            "Active Exploitation",
+            "Vulnerabilities",
+            "Ransomware",
+            "APT Activity",
+            "General",
+        ]
+        category_order = []
+        seen_categories = set()
+        for label in category_seed:
+            if label not in seen_categories:
+                seen_categories.add(label)
+                category_order.append(label)
+
+        cards_by_category = {label: [] for label in category_order}
+        sources = set()
+
         for idx, article in enumerate(self.articles):
-            source_label = escape(_raw_text(article.get('source', 'Unknown Source')) or 'Unknown Source')
+            source_raw = _raw_text(article.get('source', 'Unknown Source')) or 'Unknown Source'
+            source_label = source_raw.strip() or 'Unknown Source'
+            source_attr = _attr(source_label)
             date_label = escape(_raw_text(article.get('date', '')).strip())
             summary_text = _raw_text(article.get('AI-Summary', '')).strip()
             if not summary_text:
@@ -541,37 +631,123 @@ class CyberSecScraper:
             tags_text = _raw_text(article.get('tags', '')).strip()
             tags_markup = escape(tags_text) if tags_text else ''
 
-            cve_count = len(_ensure_list(article.get('CVEs')))
-            actor_count = len(_ensure_list(article.get('ThreatActors')))
-            ttp_count = len(_ensure_list(article.get('TTPs')))
+            cves_list = _ensure_list(article.get('CVEs'))
+            threatactors_list = _ensure_list(article.get('ThreatActors'))
+            ttps_list = _ensure_list(article.get('TTPs'))
+            iocs_list = _ensure_list(article.get('iocs'))
+
+            cve_count = len(cves_list)
+            actor_count = len(threatactors_list)
+            ttp_count = len(ttps_list)
+            ioc_count = len(iocs_list)
+
+            categories = article.get('categories') or []
+            primary_category = article.get('primary_category') or (categories[0] if categories else 'General')
+            if not categories:
+                categories = [primary_category]
+
+            for cat in categories:
+                if cat not in seen_categories:
+                    seen_categories.add(cat)
+                    category_order.append(cat)
+            if primary_category not in seen_categories:
+                seen_categories.add(primary_category)
+                category_order.append(primary_category)
+
+            category_slugs = [_slugify(cat) for cat in categories]
+            primary_slug = _slugify(primary_category)
+            if primary_category not in cards_by_category:
+                cards_by_category[primary_category] = []
 
             stats = []
+            stats.append(f"<span class=\"feed-card__category\">{escape(primary_category)}</span>")
             if cve_count:
                 stats.append(f"<span class=\"feed-card__stat\">CVEs · {cve_count}</span>")
             if actor_count:
                 stats.append(f"<span class=\"feed-card__stat\">Threat Actors · {actor_count}</span>")
             if ttp_count:
                 stats.append(f"<span class=\"feed-card__stat\">TTPs · {ttp_count}</span>")
+            if ioc_count:
+                stats.append(f"<span class=\"feed-card__stat\">IOCs · {ioc_count}</span>")
             if tags_markup:
                 stats.append(f"<span class=\"feed-card__tagline\">{tags_markup}</span>")
 
             footer_markup = ''.join(stats) if stats else "<span class=\"feed-card__stat feed-card__stat--muted\">No enrichment metadata available</span>"
 
+            search_values = [
+                _raw_text(article.get('title', '')),
+                summary_text,
+                _raw_text(article.get('notes', '')),
+                _raw_text(article.get('contents', '')),
+                tags_text,
+                " ".join(threatactors_list),
+                " ".join(ttps_list),
+                " ".join(iocs_list),
+            ]
+            search_blob = " ".join(value for value in search_values if value).lower()
+
             card_html = (
-                f"<article class=\"feed-card\" data-index=\"{idx}\" tabindex=\"0\">"
+                f"<article class=\"feed-card\" data-index=\"{idx}\" tabindex=\"0\""
+                f" data-primary-category=\"{primary_slug}\""
+                f" data-category-label=\"{_attr(primary_category)}\""
+                f" data-categories=\"{_attr(' '.join(category_slugs) or primary_slug)}\""
+                f" data-category-labels=\"{_attr('|'.join(categories))}\""
+                f" data-source=\"{source_attr}\""
+                f" data-has-cves=\"{'true' if cve_count else 'false'}\""
+                f" data-has-actors=\"{'true' if actor_count else 'false'}\""
+                f" data-has-iocs=\"{'true' if ioc_count else 'false'}\""
+                f" data-has-ttps=\"{'true' if ttp_count else 'false'}\""
+                f" data-tags=\"{_attr(tags_text.lower())}\""
+                f" data-search=\"{_attr(search_blob)}\">"
                 f"<div class=\"feed-card__meta\">"
-                f"<span class=\"feed-card__source\">{source_label}</span>"
+                f"<span class=\"feed-card__source\">{escape(source_label)}</span>"
                 f"<span class=\"feed-card__date\">{date_label}</span>"
                 f"</div>"
                 f"<p class=\"feed-card__summary\">{summary_snippet}</p>"
                 f"<div class=\"feed-card__footer\">{footer_markup}</div>"
                 f"</article>"
             )
-            card_rows.append(card_html)
 
-        cards_markup = "\n        ".join(card_rows)
-        article_count = len(card_rows)
+            cards_by_category[primary_category].append(card_html)
+            sources.add(source_label)
+
+        available_categories = [cat for cat in category_order if cards_by_category.get(cat)]
+
+        card_sections = []
+        for category in available_categories:
+            items = cards_by_category.get(category) or []
+            if not items:
+                continue
+            slug = _slugify(category)
+            section_cards = "\n          ".join(items)
+            section_markup = (
+                f"<section class=\"card-category\" data-category-section=\"{slug}\">\n"
+                f"  <header class=\"card-category__header\">\n"
+                f"    <h2 class=\"card-category__title\">{escape(category)}</h2>\n"
+                f"    <span class=\"card-category__count\">{len(items)} item{'s' if len(items) != 1 else ''}</span>\n"
+                f"  </header>\n"
+                f"  <div class=\"card-list\">\n          {section_cards}\n  </div>\n"
+                f"</section>"
+            )
+            card_sections.append(section_markup)
+
+        cards_markup = "\n        ".join(card_sections) if card_sections else "<p class=\"card-empty\">No articles available yet.</p>"
+        article_count = len(self.articles)
         article_count_label = f"{article_count} item{'s' if article_count != 1 else ''}"
+
+        sources = sorted(s for s in sources if s)
+        source_size = min(max(len(sources), 1), 8)
+        source_options = "\n            ".join(
+            f"<option value=\"{_attr(source)}\">{escape(source)}</option>" for source in sources
+        ) if sources else "<option value=\"\" disabled>No sources available</option>"
+
+        category_filter_markup = "\n            ".join(
+            f"<label class=\"filter-panel__checkbox\">"
+            f"<input type=\"checkbox\" name=\"category\" value=\"{_attr(_slugify(category))}\" data-label=\"{_attr(category)}\" checked>"
+            f"<span>{escape(category)}</span>"
+            f"</label>"
+            for category in available_categories
+        ) if available_categories else "<p class=\"filter-panel__empty\">No category filters available.</p>"
 
         articles_json = json.dumps(self.articles, ensure_ascii=False)
         articles_json = articles_json.replace('</', '<' + '\\' + '/')
@@ -663,10 +839,194 @@ main {
   color: var(--text-subtle);
 }
 
-.card-list {
+.filter-panel {
+  margin-top: clamp(0.75rem, 1vw, 1rem);
+  margin-bottom: clamp(1rem, 2vw, 1.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.9rem, 1.3vw, 1.35rem);
+  padding: clamp(1rem, 2vw, 1.35rem);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.65));
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.35);
+}
+
+.filter-panel__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-panel__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.filter-panel__input,
+.filter-panel__select {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.65);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.filter-panel__input:focus,
+.filter-panel__select:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+}
+
+.filter-panel__select {
+  min-height: clamp(3rem, 6vw, 8rem);
+}
+
+.filter-panel__hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+}
+
+.filter-panel__hint code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--accent);
+  padding: 0.1rem 0.3rem;
+  border-radius: 6px;
+}
+
+.filter-panel__checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.filter-panel__checkboxes--toggles {
+  gap: 0.6rem;
+}
+
+.filter-panel__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(51, 65, 85, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.filter-panel__checkbox input {
+  accent-color: var(--accent);
+}
+
+.filter-panel__empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-subtle);
+}
+
+.filter-panel__group--toggles {
+  gap: 0.35rem;
+}
+
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: rgba(15, 23, 42, 0.55);
+  padding: 0.35rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  width: fit-content;
+}
+
+.filter-toggle input {
+  accent-color: var(--accent);
+}
+
+.filter-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+#filter-reset {
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+#filter-reset:hover,
+#filter-reset:focus-visible {
+  background: rgba(56, 189, 248, 0.2);
+  color: #0f172a;
+  outline: none;
+}
+
+.card-groups {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1rem, 1.8vw, 1.5rem);
   flex: 1;
   overflow-y: auto;
   padding-right: clamp(0.15rem, 1vw, 0.35rem);
+}
+
+.card-category {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.card-category__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.card-category__title {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+}
+
+.card-category__count {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+.card-category[hidden] {
+  display: none !important;
+}
+
+.card-empty {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  margin: 0;
+  padding: 0.5rem 0;
+}
+
+.card-list {
   display: flex;
   flex-direction: column;
   gap: clamp(0.75rem, 1.1vw, 1.15rem);
@@ -730,6 +1090,17 @@ main {
   flex-wrap: wrap;
   gap: 0.35rem 0.5rem;
   align-items: center;
+}
+
+.feed-card__category {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(56, 189, 248, 0.16);
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
 }
 
 .feed-card__stat {
@@ -948,17 +1319,20 @@ main {
 }
 
 .detail-panel__fulltext::-webkit-scrollbar,
+.card-groups::-webkit-scrollbar,
 .card-list::-webkit-scrollbar {
   width: 10px;
 }
 
 .detail-panel__fulltext::-webkit-scrollbar-thumb,
+.card-groups::-webkit-scrollbar-thumb,
 .card-list::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.35);
   border-radius: 999px;
 }
 
 .detail-panel__fulltext::-webkit-scrollbar-track,
+.card-groups::-webkit-scrollbar-track,
 .card-list::-webkit-scrollbar-track {
   background: rgba(15, 23, 42, 0.35);
 }
@@ -1184,9 +1558,28 @@ main {
     setFullText(refs.contents, article.contents, 'No raw content captured for this item.');
   }
 
+
   let activeCard = null;
+  const countLabel = document.querySelector('[data-count-label]') || document.querySelector('.card-column__count');
+  const categorySections = Array.from(document.querySelectorAll('[data-category-section]'));
+  const filterPanel = document.getElementById('feed-filter-panel');
+  if (filterPanel) {
+    filterPanel.addEventListener('submit', (event) => event.preventDefault());
+  }
+  const filters = {
+    search: document.getElementById('filter-search'),
+    source: document.getElementById('filter-source'),
+    categories: Array.from(document.querySelectorAll('input[name="category"]')),
+    cves: document.getElementById('filter-has-cves'),
+    actors: document.getElementById('filter-has-actors'),
+    iocs: document.getElementById('filter-has-iocs'),
+    ttps: document.getElementById('filter-has-ttps')
+  };
+  const resetButton = document.getElementById('filter-reset');
+  const defaultPlaceholderHTML = placeholder ? placeholder.innerHTML : '';
+
   function selectCard(card) {
-    if (!card) {
+    if (!card || card.hidden) {
       return;
     }
     if (activeCard) {
@@ -1196,7 +1589,146 @@ main {
     activeCard.classList.add('feed-card--active');
     const index = Number(card.getAttribute('data-index'));
     const article = Number.isFinite(index) ? articles[index] : null;
+    if (placeholder) {
+      placeholder.style.display = 'none';
+      placeholder.innerHTML = defaultPlaceholderHTML;
+    }
+    if (content) {
+      content.hidden = false;
+    }
     updateDetail(article);
+  }
+
+  function parseTokens(value) {
+    if (!value) {
+      return [];
+    }
+    const matches = value.match(/"[^"]+"|\S+/g) || [];
+    return matches.map((token) => token.replace(/^"|"$/g, ''));
+  }
+
+  function matchesSearch(card, tokens) {
+    if (!tokens.length) {
+      return true;
+    }
+    const searchField = (card.dataset.search || '').toLowerCase();
+    const sourceField = (card.dataset.source || '').toLowerCase();
+    const categoryLabels = (card.dataset.categoryLabels || '').toLowerCase();
+    const categorySlugs = (card.dataset.categories || '').toLowerCase();
+    const tagsField = (card.dataset.tags || '').toLowerCase();
+
+    return tokens.every((rawToken) => {
+      const token = rawToken.toLowerCase();
+      if (!token) {
+        return true;
+      }
+      if (token.startsWith('source:')) {
+        const query = token.slice(7).trim();
+        return !query || sourceField.includes(query);
+      }
+      if (token.startsWith('category:')) {
+        const query = token.slice(9).trim();
+        if (!query) {
+          return true;
+        }
+        const slugMatches = categorySlugs.split(' ').filter(Boolean);
+        return slugMatches.includes(query) || categoryLabels.includes(query);
+      }
+      if (token.startsWith('tag:')) {
+        const query = token.slice(4).trim();
+        return !query || tagsField.includes(query);
+      }
+      return searchField.includes(token);
+    });
+  }
+
+  function applyFilters() {
+    const categoryCheckboxes = filters.categories || [];
+    const activeCategoryValues = categoryCheckboxes
+      .filter((checkbox) => checkbox.checked)
+      .map((checkbox) => checkbox.value);
+    const shouldFilterByCategory = activeCategoryValues.length > 0 && activeCategoryValues.length < categoryCheckboxes.length;
+    const selectedSources = Array.from(filters.source?.selectedOptions || [])
+      .map((option) => option.value)
+      .filter((value) => value);
+    const tokens = parseTokens(filters.search?.value.trim() || '');
+    const requireCves = Boolean(filters.cves?.checked);
+    const requireActors = Boolean(filters.actors?.checked);
+    const requireIocs = Boolean(filters.iocs?.checked);
+    const requireTtps = Boolean(filters.ttps?.checked);
+
+    let visibleCount = 0;
+    let firstVisibleCard = null;
+
+    cards.forEach((card) => {
+      const dataset = card.dataset || {};
+      const categories = (dataset.categories || '').split(' ').filter(Boolean);
+      const hasCategory = !shouldFilterByCategory || categories.some((value) => activeCategoryValues.includes(value));
+      const matchesSource = !selectedSources.length || selectedSources.includes(dataset.source || '');
+      const hasCves = dataset.hasCves === 'true';
+      const hasActors = dataset.hasActors === 'true';
+      const hasIocs = dataset.hasIocs === 'true';
+      const hasTtps = dataset.hasTtps === 'true';
+      const searchMatch = matchesSearch(card, tokens);
+
+      let visible = hasCategory && matchesSource && searchMatch;
+      if (requireCves && !hasCves) visible = false;
+      if (requireActors && !hasActors) visible = false;
+      if (requireIocs && !hasIocs) visible = false;
+      if (requireTtps && !hasTtps) visible = false;
+
+      card.hidden = !visible;
+
+      if (visible) {
+        visibleCount += 1;
+        if (!firstVisibleCard) {
+          firstVisibleCard = card;
+        }
+      }
+    });
+
+    categorySections.forEach((section) => {
+      const visibleCards = Array.from(section.querySelectorAll('.feed-card')).filter((card) => !card.hidden);
+      const visibleInSection = visibleCards.length;
+      const countNode = section.querySelector('.card-category__count');
+      if (countNode) {
+        countNode.textContent = `${visibleInSection} item${visibleInSection === 1 ? '' : 's'}`;
+      }
+      section.hidden = visibleInSection === 0;
+    });
+
+    if (countLabel) {
+      countLabel.textContent = `${visibleCount} item${visibleCount === 1 ? '' : 's'}`;
+    }
+
+    if (visibleCount === 0) {
+      if (content) {
+        content.hidden = true;
+      }
+      if (placeholder) {
+        placeholder.innerHTML = '<p>No articles match your filters yet. Adjust your filters or try a different search term.</p>';
+        placeholder.style.display = 'block';
+      }
+      if (activeCard) {
+        activeCard.classList.remove('feed-card--active');
+        activeCard = null;
+      }
+      return;
+    }
+
+    if (placeholder) {
+      placeholder.innerHTML = defaultPlaceholderHTML;
+      placeholder.style.display = 'none';
+    }
+
+    if (activeCard && activeCard.hidden) {
+      activeCard.classList.remove('feed-card--active');
+      activeCard = null;
+    }
+
+    if (!activeCard && firstVisibleCard) {
+      selectCard(firstVisibleCard);
+    }
   }
 
   cards.forEach((card) => {
@@ -1209,9 +1741,44 @@ main {
     });
   });
 
-  if (cards.length) {
-    selectCard(cards[0]);
+  const filterInputs = [
+    filters.search,
+    filters.source,
+    filters.cves,
+    filters.actors,
+    filters.iocs,
+    filters.ttps,
+    ...(filters.categories || [])
+  ].filter(Boolean);
+
+  filterInputs.forEach((input) => {
+    const eventName = input === filters.search ? 'input' : 'change';
+    input.addEventListener(eventName, () => applyFilters());
+  });
+
+  if (resetButton) {
+    resetButton.addEventListener('click', () => {
+      if (filters.search) {
+        filters.search.value = '';
+      }
+      if (filters.source) {
+        Array.from(filters.source.options).forEach((option) => {
+          option.selected = false;
+        });
+      }
+      (filters.categories || []).forEach((checkbox) => {
+        checkbox.checked = true;
+      });
+      if (filters.cves) filters.cves.checked = false;
+      if (filters.actors) filters.actors.checked = false;
+      if (filters.iocs) filters.iocs.checked = false;
+      if (filters.ttps) filters.ttps.checked = false;
+      applyFilters();
+    });
   }
+
+  applyFilters();
+
 })();
         """.strip()
 
@@ -1234,9 +1801,41 @@ main {
     <section class=\"card-column\" aria-label=\"Summarised articles\">
       <div class=\"card-column__header\">
         <span class=\"card-column__title\">AI summaries</span>
-        <span class=\"card-column__count\">{article_count_label}</span>
+        <span class=\"card-column__count\" data-count-label>{article_count_label}</span>
       </div>
-      <div class=\"card-list\">
+      <form class=\"filter-panel\" id=\"feed-filter-panel\" aria-label=\"Feed filters\" autocomplete=\"off\">
+        <div class=\"filter-panel__group filter-panel__group--search\">
+          <label class=\"filter-panel__label\" for=\"filter-search\">Search</label>
+          <input class=\"filter-panel__input\" type=\"search\" id=\"filter-search\" name=\"search\" placeholder=\"Search summaries, notes, actors…\">
+          <p class=\"filter-panel__hint\">Supports tokens such as <code>source:</code>, <code>category:</code>, and <code>tag:</code>.</p>
+        </div>
+        <div class=\"filter-panel__group\">
+          <span class=\"filter-panel__label\">Categories</span>
+          <div class=\"filter-panel__checkboxes\">
+            {category_filter_markup}
+          </div>
+        </div>
+        <div class=\"filter-panel__group\">
+          <label class=\"filter-panel__label\" for=\"filter-source\">Sources</label>
+          <select class=\"filter-panel__select\" id=\"filter-source\" name=\"source\" multiple size=\"{source_size}\">
+            {source_options}
+          </select>
+          <p class=\"filter-panel__hint\">Hold Ctrl/Cmd to select multiple sources.</p>
+        </div>
+        <div class=\"filter-panel__group filter-panel__group--toggles\">
+          <span class=\"filter-panel__label\">Data enrichment</span>
+          <div class=\"filter-panel__checkboxes filter-panel__checkboxes--toggles\">
+            <label class=\"filter-toggle\"><input type=\"checkbox\" id=\"filter-has-cves\"> CVEs only</label>
+            <label class=\"filter-toggle\"><input type=\"checkbox\" id=\"filter-has-actors\"> Threat actors only</label>
+            <label class=\"filter-toggle\"><input type=\"checkbox\" id=\"filter-has-iocs\"> IOCs only</label>
+            <label class=\"filter-toggle\"><input type=\"checkbox\" id=\"filter-has-ttps\"> TTPs only</label>
+          </div>
+        </div>
+        <div class=\"filter-panel__actions\">
+          <button type=\"button\" id=\"filter-reset\">Reset filters</button>
+        </div>
+      </form>
+      <div class=\"card-groups\">
         {cards_markup}
       </div>
     </section>
