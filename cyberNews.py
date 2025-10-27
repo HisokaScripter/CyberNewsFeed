@@ -238,7 +238,29 @@ class CyberSecScraper:
         ]
         text_lower = text.lower()
         return any(kw in text_lower for kw in patch_keywords)
-    
+
+    def _sanitize_html_to_text(self, value):
+        if not value:
+            return ""
+        try:
+            return BeautifulSoup(value, "html.parser").get_text(" ", strip=True)
+        except Exception:
+            return str(value)
+
+    def _normalise_date(self, entry):
+        for attr in ("published_parsed", "updated_parsed", "created_parsed"):
+            struct = entry.get(attr)
+            if struct:
+                try:
+                    return datetime(*struct[:6]).isoformat()
+                except Exception:
+                    continue
+        for attr in ("published", "updated", "created"):
+            value = entry.get(attr)
+            if value:
+                return value
+        return ""
+
     def _tag(self, title, body):
         hay = f" {title.lower()} \n {body.lower()} "
         found = [k for k in self.KeyWords if k.strip().lower() in hay]
@@ -284,70 +306,120 @@ class CyberSecScraper:
             f.write(soup.prettify())
 
     def ingest_feed(self, source):
-        feed = feedparser.parse(self.Feeds[source])
-        for entry in feed.entries:
+        try:
+            feed = feedparser.parse(self.Feeds[source])
+        except Exception as exc:
+            print(f"Failed to parse feed {source}: {exc}")
+            return
+
+        entries = getattr(feed, "entries", [])
+        if not entries:
+            print(f"No entries discovered for {source} (URL: {self.Feeds[source]})")
+            return
+
+        for entry in entries:
             print("-"*120)
             print("Article count: ", len(self.articles)+1)
             print("Source: ", source )
-            print("Title: ", getattr(entry, "title", ""))
+            title = (entry.get("title") or "").strip()
+            print("Title: ", title)
             #if count <= 0:
             #    return
             #count -= 1
-            title = getattr(entry, "title", "")
-            link = getattr(entry, "link", "")
-            published = getattr(entry, "published", getattr(entry, "updated", ""))
+            link = (entry.get("link") or "").strip()
+            published = self._normalise_date(entry)
             identifier = self._article_identifier(source, title, link)
             if identifier and identifier in self.parsed_articles:
                 print(f"Skipping previously parsed article: {title}")
                 continue
-            body = ""
-            '''
-            #if hasattr(entry, "summary"):
-                body = BeautifulSoup(entry.summary, "html.parser").get_text(" ", strip=True)
-            if not body and hasattr(entry, "content"):
-                try:
-                    body = BeautifulSoup(entry.content[0].value, "html.parser").get_text(" ", strip=True)
-                except Exception:
-                    pass
-            '''
+            body_segments = []
+            summary_html = entry.get("summary") or entry.get("description")
+            if summary_html:
+                body_segments.append(self._sanitize_html_to_text(summary_html))
+            entry_content = entry.get("content") or []
+            for content in entry_content:
+                if isinstance(content, dict):
+                    value = content.get("value")
+                else:
+                    value = getattr(content, "value", None)
+                if value:
+                    body_segments.append(self._sanitize_html_to_text(value))
+            body = "\n".join(segment for segment in body_segments if segment)
             if not body and link:
                 html = self.maybe_fetch_html(link, referer=self.Feeds[source], debug=True)
                 if html:
                     soup = BeautifulSoup(html, "html.parser")
-                    #Body and headers strings
-                    bodyandheadersstrings = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
-                    body = ""
-                    for element in bodyandheadersstrings:
-                        body += element.get_text(" ", strip=True) + "\n"
+                    elements = soup.select('article p, article li, article h1, article h2, article h3, article h4, article h5, article h6')
+                    if not elements:
+                        elements = soup.find_all(['p', 'li'])
+                    body = "\n".join(el.get_text(" ", strip=True) for el in elements if el.get_text(strip=True))
             if not body:
                 self._sleep()
                 continue
-            summary = self._summarize(body)
-            content = summary.content
+            body = body.strip()
+            if not body:
+                self._sleep()
+                continue
 
-            data = json.loads(content)
-            summary = data.get("summary", "N/A")
-            threatactors = data.get("threat_actors", [])
-            iocs = data.get("iocs", [])
-            ttps = data.get("ttps", [])
-            cves = data.get("cves", [])
-            notes = data.get("notes", "")
-            print("Summary: ", summary)
+            ai_payload = {}
+            ai_summary_text = ""
+            try:
+                ai_response = self._summarize(body[:6000])
+                raw_content = getattr(ai_response, "content", ai_response)
+                if not isinstance(raw_content, str):
+                    raw_content = json.dumps(raw_content)
+                ai_payload = json.loads(raw_content)
+            except Exception as exc:
+                print(f"AI summarisation failed for {title}: {exc}")
+                ai_payload = {}
+            if not isinstance(ai_payload, dict):
+                ai_payload = {}
+
+            ai_summary_text = ai_payload.get("summary") or ""
+            threatactors = ai_payload.get("threat_actors") or []
+            iocs = ai_payload.get("iocs") or []
+            ttps = ai_payload.get("ttps") or []
+            cves = ai_payload.get("cves") or []
+            notes = ai_payload.get("notes") or ""
+
+            if not ai_summary_text and body:
+                ai_summary_text = body[:400].strip()
+                if len(body) > 400:
+                    ai_summary_text = ai_summary_text.rstrip() + "…"
+            if not ai_summary_text:
+                ai_summary_text = "Summary unavailable."
+
+            def _coerce_list(value):
+                if value is None:
+                    return []
+                if isinstance(value, list):
+                    return value
+                if isinstance(value, (set, tuple)):
+                    return list(value)
+                return [value]
+
+            threatactors = _coerce_list(threatactors)
+            iocs = _coerce_list(iocs)
+            ttps = _coerce_list(ttps)
+            cves = _coerce_list(cves)
+            notes = notes if isinstance(notes, str) else str(notes)
+            print("Summary: ", ai_summary_text)
             print("Threat Actors: ", threatactors)
             print("IOCs: ", iocs)
             print("TTPs: ", ttps)
             print("CVEs: ", cves)
             print("Notes: ", notes)
             print("Source: ", link)
-            tags = self._tag(title, str(summary))
+            tags = self._tag(title, body + "\n" + ai_summary_text)
 
             self.articles.append({
                     "source": source,
+                    "title": title,
                     "CVEs": cves,
                     "date": published,
                     "notes": notes,
                     "article": link,
-                    "AI-Summary": summary,
+                    "AI-Summary": ai_summary_text,
                     "iocs": iocs,
                     "ThreatActors": threatactors,
                     "TTPs": ttps,
@@ -364,9 +436,11 @@ class CyberSecScraper:
     def scrape_Huntress(self):         self.ingest_huntress()
     def scrape_all(self):
         print("Starting cybersecurity news scrape...\n")
-        self.scrape_BleepingComputer()
-        self.scrape_TheHackerNews()
-        self.scrape_DarkReading()
+        for source in self.Feeds:
+            try:
+                self.ingest_feed(source)
+            except Exception as exc:
+                print(f"Error ingesting {source}: {exc}")
         print(f"\n✓ Total articles scraped: {len(self.articles)}")
         return self.articles
 
@@ -384,7 +458,7 @@ class CyberSecScraper:
             print("No articles to save!"); return
         with open(filename, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=[
-                'source','CVEs','date','notes','article','AI-Summary','iocs','ThreatActors','TTPs','contents','tags'
+                'source','title','CVEs','date','notes','article','AI-Summary','iocs','ThreatActors','TTPs','contents','tags'
             ])
             writer.writeheader(); writer.writerows(self.articles)
         print(f"✓ Saved to {filename}")
@@ -462,7 +536,7 @@ class CyberSecScraper:
         article_count_label = f"{article_count} item{'s' if article_count != 1 else ''}"
 
         articles_json = json.dumps(self.articles, ensure_ascii=False)
-        articles_json = articles_json.replace('</', '<\/')
+        articles_json = articles_json.replace('</', '<' + '\\' + '/')
 
         css = """
 :root {
@@ -693,6 +767,20 @@ main {
   gap: 0.35rem;
 }
 
+.detail-panel__title {
+  margin: 0;
+  font-size: clamp(1.1rem, 1.8vw, 1.35rem);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.detail-panel__meta-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
 .detail-panel__source {
   font-size: 1.05rem;
   font-weight: 600;
@@ -888,6 +976,7 @@ main {
   const content = detailPanel.querySelector('.detail-panel__content');
 
   const refs = {
+    title: detailPanel.querySelector('[data-detail="title"]'),
     source: detailPanel.querySelector('[data-detail="source"]'),
     date: detailPanel.querySelector('[data-detail="date"]'),
     link: detailPanel.querySelector('[data-detail="article"]'),
@@ -1033,6 +1122,7 @@ main {
     if (content) {
       content.hidden = false;
     }
+    setText(refs.title, article.title || '', 'Untitled');
     setText(refs.source, article.source || 'Unknown source', 'Unknown source');
     setText(refs.date, article.date || '', 'Date unavailable');
     if (refs.link) {
@@ -1117,13 +1207,16 @@ main {
         <div class=\"detail-panel__placeholder\">
           <p>Select a summary on the left to explore full intelligence, enrichment data, and source material.</p>
         </div>
-        <div class=\"detail-panel__content\" hidden>
-          <div class=\"detail-panel__header\">
-            <div class=\"detail-panel__meta\">
-              <span class=\"detail-panel__source\" data-detail=\"source\"></span>
-              <span class=\"detail-panel__date\" data-detail=\"date\"></span>
-            </div>
-            <a class=\"detail-panel__link\" data-detail=\"article\" target=\"_blank\" rel=\"noopener noreferrer\">Open original article</a>
+          <div class=\"detail-panel__content\" hidden>
+            <div class=\"detail-panel__header\">
+              <div class=\"detail-panel__meta\">
+                <h2 class=\"detail-panel__title\" data-detail=\"title\"></h2>
+                <div class=\"detail-panel__meta-row\">
+                  <span class=\"detail-panel__source\" data-detail=\"source\"></span>
+                  <span class=\"detail-panel__date\" data-detail=\"date\"></span>
+                </div>
+              </div>
+              <a class=\"detail-panel__link\" data-detail=\"article\" target=\"_blank\" rel=\"noopener noreferrer\">Open original article</a>
           </div>
           <section class=\"detail-panel__section\">
             <h2>AI summary</h2>
@@ -1190,11 +1283,7 @@ main {
 
 if __name__ == "__main__":
     s = CyberSecScraper()
-    print("Starting cybersecurity news scrape...\n")
-    s.scrape_TheHackerNews()
-    s.scrape_BleepingComputer()
-    s.scrape_DarkReading()
-    #s.scrape_Huntress()
+    s.scrape_all()
     s.save_to_csv()
     s.save_to_html()
     print("\n✓ Done!")
