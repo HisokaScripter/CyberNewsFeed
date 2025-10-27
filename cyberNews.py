@@ -919,6 +919,10 @@ class CyberSecScraper:
         if getattr(feed, "bozo", False):
             print(f"Warning: Feed parsing issue detected for {source} ({feed_url}): {getattr(feed, 'bozo_exception', '')}")
 
+        feed = self._parse_feed(feed_url, requires_tor=requires_tor)
+        if getattr(feed, "bozo", False):
+            print(f"Warning: Feed parsing issue detected for {source} ({feed_url}): {getattr(feed, 'bozo_exception', '')}")
+
         entries = getattr(feed, "entries", [])
         if not entries:
             print(f"No entries discovered for {source} (URL: {feed_url})")
