@@ -1226,8 +1226,9 @@ class CyberSecScraper:
             source_names = list(dict.fromkeys(source_names))
             source_raw = _raw_text(article.get('source', ''))
             fallback_source = source_raw.strip() or 'Unknown Source'
-            source_label = ", ".join(source_names) if source_names else fallback_source
-            dataset_sources = "|".join(source_names) if source_names else fallback_source
+            filter_sources = [fallback_source]
+            source_label = fallback_source
+            dataset_sources = "|".join(filter_sources)
             source_attr = _attr(dataset_sources)
             date_label = escape(_raw_text(article.get('date', '')).strip())
             summary_text = _raw_text(article.get('AI-Summary', '')).strip()
@@ -1277,6 +1278,8 @@ class CyberSecScraper:
                 summary_text,
                 _raw_text(article.get('notes', '')),
                 tags_text,
+                fallback_source,
+                " ".join(source_names),
                 " ".join(threatactors_list),
                 " ".join(ttps_list),
                 " ".join(iocs_list),
@@ -1311,6 +1314,7 @@ class CyberSecScraper:
                 'primary_category': primary_category,
                 'categories': categories,
                 'source_names': source_names,
+                'filter_sources': filter_sources,
                 'fallback_source': fallback_source,
             }
 
@@ -1333,12 +1337,10 @@ class CyberSecScraper:
                 seen_categories.add(primary_category)
                 category_order.append(primary_category)
             cards_by_category[primary_category].append(result['card_html'])
-            source_names = result['source_names']
-            if source_names:
-                for src_name in source_names:
+            filter_sources = result['filter_sources']
+            if filter_sources:
+                for src_name in filter_sources:
                     sources.add(src_name)
-            else:
-                sources.add(result['fallback_source'])
 
         available_categories = [cat for cat in category_order if cards_by_category.get(cat)]
 
@@ -1399,9 +1401,14 @@ class CyberSecScraper:
   box-sizing: border-box;
 }
 
+html, body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  height: 100vh;
   font-family: var(--font-base);
   background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 45%),
               radial-gradient(circle at 80% 0%, rgba(99, 102, 241, 0.15), transparent 50%),
@@ -1409,6 +1416,7 @@ body {
   color: var(--text-primary);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 header {
@@ -1436,6 +1444,7 @@ main {
   gap: clamp(1rem, 2vw, 2rem);
   padding: 0 clamp(1.25rem, 3vw, 3rem) clamp(1.5rem, 4vw, 3rem);
   overflow: hidden;
+  min-height: 0;
 }
 
 .card-column {
@@ -1446,6 +1455,8 @@ main {
   gap: 1rem;
   border-right: 1px solid var(--surface-border);
   padding-right: clamp(1rem, 2vw, 1.5rem);
+  height: 100%;
+  min-height: 0;
 }
 
 .card-column__header {
@@ -1453,6 +1464,7 @@ main {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .card-column__title {
@@ -1479,6 +1491,7 @@ main {
   border-radius: 20px;
   border: 1px solid rgba(148, 163, 184, 0.14);
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.35);
+  flex-shrink: 0;
 }
 
 .filter-panel__group {
@@ -1617,6 +1630,7 @@ main {
   flex: 1;
   overflow-y: auto;
   padding-right: clamp(0.15rem, 1vw, 0.35rem);
+  min-height: 0;
 }
 
 .card-category {
@@ -1759,6 +1773,7 @@ main {
   flex-direction: column;
   padding-bottom: clamp(1rem, 2.5vw, 2rem);
   min-width: 0;
+  min-height: 0;
 }
 
 .detail-panel__surface {
@@ -1787,8 +1802,11 @@ main {
   display: flex;
   flex-direction: column;
   gap: clamp(1.25rem, 1.6vw, 1.85rem);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   flex: 1;
+  min-height: 0;
+  padding-right: clamp(0.2rem, 0.5vw, 0.6rem);
 }
 
 .detail-panel__header {
@@ -1982,9 +2000,15 @@ main {
 }
 
 @media (max-width: 1080px) {
+  body {
+    height: auto;
+    overflow-y: auto;
+  }
+
   main {
     flex-direction: column;
     padding: 0 clamp(1rem, 4vw, 2rem) clamp(1.5rem, 4vw, 3rem);
+    min-height: auto;
   }
 
   .card-column {
@@ -1994,8 +2018,22 @@ main {
     border-bottom: 1px solid var(--surface-border);
     padding-right: 0;
     padding-bottom: 1.5rem;
+    height: auto;
   }
 
+  .detail-panel {
+    padding-bottom: 1.5rem;
+    min-height: auto;
+  }
+
+  .detail-panel__surface {
+    max-height: none;
+  }
+
+  .detail-panel__content {
+    overflow-y: visible;
+    padding-right: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
