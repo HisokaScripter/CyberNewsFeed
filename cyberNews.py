@@ -769,6 +769,71 @@ class CyberSecScraper:
         except Exception:
             return str(value)
 
+    def _normalise_whitespace(self, text):
+        if not text:
+            return ""
+        text = re.sub(r"[\u200b\u200c\u200d\ufeff]", " ", text)
+        text = re.sub(r"[ \t\r\f\v]+", " ", text)
+        text = re.sub(r" ?\n ?", "\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+    def _extract_full_article_text(self, url, referer=None, existing_text=""):
+        if not url:
+            return existing_text
+        html = self.maybe_fetch_html(url, referer=referer)
+        if not html:
+            return existing_text
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup.find_all(["script", "style", "noscript", "iframe", "svg", "canvas", "form", "header", "footer", "nav", "aside"]):
+            tag.decompose()
+
+        candidates = []
+        selectors = [
+            "article",
+            "main",
+            "div[class*='content']",
+            "div[class*='article']",
+            "div[class*='post']",
+            "section[class*='content']",
+            "section[class*='article']",
+            "section[class*='post']",
+            "div[id*='content']",
+            "div[id*='article']",
+            "div[id*='post']",
+        ]
+        for selector in selectors:
+            for node in soup.select(selector):
+                if node not in candidates:
+                    candidates.append(node)
+        if not candidates:
+            body = soup.body or soup
+            if body:
+                candidates.append(body)
+
+        def collect_text(node):
+            blocks = []
+            for element in node.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "blockquote", "pre", "code"]):
+                text = element.get_text(" ", strip=True)
+                if text:
+                    blocks.append(text)
+            if not blocks:
+                text = node.get_text(" ", strip=True)
+                return text.strip()
+            return "\n".join(blocks).strip()
+
+        longest_text = existing_text or ""
+        for candidate in candidates:
+            extracted = collect_text(candidate)
+            if extracted and len(extracted) > len(longest_text):
+                longest_text = extracted
+
+        if not longest_text:
+            return existing_text
+        if existing_text and len(longest_text) < len(existing_text) * 0.6:
+            return existing_text
+        return longest_text
+
     def _normalise_date(self, entry):
         for attr in ("published_parsed", "updated_parsed", "created_parsed"):
             struct = entry.get(attr)
@@ -854,6 +919,10 @@ class CyberSecScraper:
         if getattr(feed, "bozo", False):
             print(f"Warning: Feed parsing issue detected for {source} ({feed_url}): {getattr(feed, 'bozo_exception', '')}")
 
+        feed = self._parse_feed(feed_url, requires_tor=requires_tor)
+        if getattr(feed, "bozo", False):
+            print(f"Warning: Feed parsing issue detected for {source} ({feed_url}): {getattr(feed, 'bozo_exception', '')}")
+
         entries = getattr(feed, "entries", [])
         if not entries:
             print(f"No entries discovered for {source} (URL: {feed_url})")
@@ -887,18 +956,10 @@ class CyberSecScraper:
                 if value:
                     body_segments.append(self._sanitize_html_to_text(value))
             body = "\n".join(segment for segment in body_segments if segment)
-            if not body and link:
-                html = self.maybe_fetch_html(link, referer=feed_url, debug=True)
-                if html:
-                    soup = BeautifulSoup(html, "html.parser")
-                    elements = soup.select('article p, article li, article h1, article h2, article h3, article h4, article h5, article h6')
-                    if not elements:
-                        elements = soup.find_all(['p', 'li'])
-                    body = "\n".join(el.get_text(" ", strip=True) for el in elements if el.get_text(strip=True))
-            if not body:
-                self._sleep()
-                continue
-            body = body.strip()
+            body = self._normalise_whitespace(body)
+            if link:
+                enriched = self._extract_full_article_text(link, referer=feed_url, existing_text=body)
+                body = self._normalise_whitespace(enriched)
             if not body:
                 self._sleep()
                 continue
