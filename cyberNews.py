@@ -1449,8 +1449,8 @@ main {
 }
 
 .card-column {
-  flex: 0 0 38%;
-  max-width: 520px;
+  flex: 0 0 clamp(42%, 45vw, 620px);
+  max-width: clamp(500px, 48vw, 660px);
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -2038,11 +2038,6 @@ main {
   .detail-panel__surface {
     max-height: none;
     height: auto;
-  }
-
-  .detail-panel__content {
-    overflow-y: visible;
-    padding-right: 0;
   }
 
   .detail-panel__content {
