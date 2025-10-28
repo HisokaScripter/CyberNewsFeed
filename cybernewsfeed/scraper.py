@@ -26,7 +26,13 @@ from pathlib import Path
 from .html_builder import build_html
 
 class CyberSecScraper:
-    def __init__(self, *, auto_generate_html: bool = True):
+    def __init__(
+        self,
+        *,
+        auto_generate_html: bool = True,
+        data_file: Path | None = None,
+        parsed_articles_file: Path | None = None,
+    ):
         self.sess = requests.Session()
         self.sess.headers.update({
             "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -84,12 +90,22 @@ class CyberSecScraper:
         """
         self.aiModel = "qwen/qwen3-4b-2507"
         base_dir = Path(__file__).resolve().parent.parent
-        self.data_file = base_dir / "cybersec_news.json"
+        self.data_file = Path(data_file) if data_file else base_dir / "cybersec_news.json"
         self.html_output_file = base_dir / "index.html"
         self.darkweb_feeds_file = base_dir / "darkweb_feeds.json"
         self.articles = []
         self.article_index_by_fingerprint = {}
-        self.parsed_articles_file = base_dir / "ParsedArticles.txt"
+        if parsed_articles_file:
+            self.parsed_articles_file = Path(parsed_articles_file)
+        else:
+            legacy_cache = base_dir / "ParsedArticles.txt"
+            candidate_cache = self.data_file.with_suffix(".parsed.txt")
+            if legacy_cache.exists() and not candidate_cache.exists():
+                self.parsed_articles_file = legacy_cache
+            else:
+                if candidate_cache == self.data_file:
+                    candidate_cache = legacy_cache
+                self.parsed_articles_file = candidate_cache
         self.parsed_articles = self._load_parsed_articles()
         self.html_update_interval = 10
         self._articles_since_html = 0
@@ -231,6 +247,7 @@ class CyberSecScraper:
         parsed = set()
         try:
             if not self.parsed_articles_file.exists():
+                self.parsed_articles_file.parent.mkdir(parents=True, exist_ok=True)
                 self.parsed_articles_file.touch()
                 return parsed
             with self.parsed_articles_file.open("r", encoding="utf-8") as f:
@@ -290,6 +307,7 @@ class CyberSecScraper:
             return
         self.parsed_articles.add(identifier)
         try:
+            self.parsed_articles_file.parent.mkdir(parents=True, exist_ok=True)
             with self.parsed_articles_file.open("a", encoding="utf-8") as f:
                 f.write(identifier + "\n")
         except Exception as exc:

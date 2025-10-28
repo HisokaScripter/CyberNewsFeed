@@ -32,7 +32,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    scraper = CyberSecScraper(auto_generate_html=False)
+    scraper = CyberSecScraper(
+        auto_generate_html=False,
+        data_file=args.output,
+    )
     scraper.scrape_all()
     scraper.save_to_json(args.output)
     if args.csv:
