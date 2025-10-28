@@ -64,6 +64,7 @@ To maintain separate feeds, simply enter a different export path when prompted (
 - **Content normalization** – deduplicates articles, extracts metadata, and converts HTML into markdown/plain text for downstream processing.
 - **AI enrichment (optional)** – integrates with [LM Studio](https://lmstudio.ai/) models to summarize articles and surface CVEs, IOCs, TTPs, and threat actor mentions.
 - **Automated dashboard** – turns the scraped dataset into an interactive static site (`index.html`) with filtering, search, and enrichment statistics.
+- **Dataminr-inspired workspace** – ships with a CyberSignal template that mirrors Dataminr's layout while retaining CyberNewsFeed branding, ready for GitHub Pages hosting.
 - **Flexible exports** – write results to JSON (default) and CSV, then regenerate the dashboard at any time.
 
 ## Requirements

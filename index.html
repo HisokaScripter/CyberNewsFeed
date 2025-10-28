@@ -3,57 +3,115 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cybersecurity News Feed</title>
+  <title>CyberSignal Intelligence Stream</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <h1 class="page-title">Cybersecurity Intelligence Briefing</h1>
-    <p class="page-subtitle">Review AI-powered digests of the latest security headlines. Select a card to reveal the enriched intelligence, indicators, and primary source material.</p>
-  </header>
-  <main>
-    <section class="card-column" aria-label="Summarised articles">
-      <div class="card-column__header">
-        <span class="card-column__title">AI summaries</span>
-        <span class="card-column__count" data-count-label>0 items</span>
+  <div class="app-shell">
+    <header class="topbar" role="banner">
+      <div class="topbar__brand">
+        <span class="topbar__logo" aria-hidden="true">CN</span>
+        <div class="topbar__text">
+          <span class="topbar__product">CyberSignal</span>
+          <span class="topbar__subtitle">Live situational intelligence</span>
+        </div>
       </div>
-      <form class="filter-panel" id="feed-filter-panel" aria-label="Feed filters" autocomplete="off">
-        <div class="filter-panel__group filter-panel__group--search">
-          <label class="filter-panel__label" for="filter-search">Search</label>
-          <input class="filter-panel__input" type="search" id="filter-search" name="search" placeholder="Search summaries, notes, actors…">
-          <p class="filter-panel__hint">Supports tokens such as <code>source:</code>, <code>category:</code>, and <code>tag:</code>.</p>
-        </div>
-        <div class="filter-panel__group">
-          <span class="filter-panel__label">Categories</span>
-          <div class="filter-panel__checkboxes">
-            <p class="filter-panel__empty">No category filters available.</p>
-          </div>
-        </div>
-        <div class="filter-panel__group">
-          <label class="filter-panel__label" for="filter-source">Sources</label>
-          <select class="filter-panel__select" id="filter-source" name="source" multiple size="1">
-            <option value="" disabled>No sources available</option>
-          </select>
-          <p class="filter-panel__hint">Hold Ctrl/Cmd to select multiple sources.</p>
-        </div>
-        <div class="filter-panel__group filter-panel__group--toggles">
-          <span class="filter-panel__label">Data enrichment</span>
-          <div class="filter-panel__checkboxes filter-panel__checkboxes--toggles">
-            <label class="filter-toggle"><input type="checkbox" id="filter-has-cves"> CVEs only</label>
-            <label class="filter-toggle"><input type="checkbox" id="filter-has-actors"> Threat actors only</label>
-            <label class="filter-toggle"><input type="checkbox" id="filter-has-iocs"> IOCs only</label>
-            <label class="filter-toggle"><input type="checkbox" id="filter-has-ttps"> TTPs only</label>
-          </div>
-        </div>
-        <div class="filter-panel__actions">
-          <button type="button" id="filter-reset">Reset filters</button>
-        </div>
-      </form>
-      <div class="card-groups">
-        <p class="card-empty">No articles available yet.</p>
+      <div class="topbar__actions">
+        <button type="button" class="topbar__action topbar__action--primary">Create new view</button>
+        <button type="button" class="topbar__action">Help center</button>
+        <button type="button" class="topbar__avatar" aria-label="Open profile menu">AM</button>
       </div>
-    </section>
-  </main>
+    </header>
+    <div class="app-shell__body">
+      <nav class="sidebar" aria-label="Workspace navigation">
+        <div class="sidebar__section">
+          <h2 class="sidebar__heading">Workspace</h2>
+          <ul class="sidebar__menu">
+            <li><span class="sidebar__item sidebar__item--active">Intelligence stream</span></li>
+            <li><span class="sidebar__item">Saved briefings</span></li>
+            <li><span class="sidebar__item">Shared alerts</span></li>
+          </ul>
+        </div>
+        <div class="sidebar__section">
+          <h2 class="sidebar__heading">Watchlists</h2>
+          <ul class="sidebar__menu">
+            <li><span class="sidebar__item">Critical infrastructure</span></li>
+            <li><span class="sidebar__item">Ransomware operators</span></li>
+            <li><span class="sidebar__item">Emerging CVEs</span></li>
+          </ul>
+        </div>
+      </nav>
+      <main class="main-feed" role="main">
+        <header class="main-feed__header">
+          <div>
+            <h1 class="main-feed__title">Realtime cyber intelligence</h1>
+            <p class="main-feed__subtitle">Curated signal inspired by Dataminr's workspace — tuned for security analysts.</p>
+          </div>
+          <dl class="signal-metrics" aria-label="Feed summary metrics">
+            <div class="signal-metric">
+              <dt>Active items</dt>
+              <dd data-count-label>0 items</dd>
+            </div>
+            <div class="signal-metric">
+              <dt>Feed health</dt>
+              <dd class="signal-metric__status">Stable</dd>
+            </div>
+            <div class="signal-metric">
+              <dt>Last sync</dt>
+              <dd class="signal-metric__status" data-last-sync>Just now</dd>
+            </div>
+          </dl>
+        </header>
+        <section class="card-column" aria-label="Summarised articles">
+          <div class="card-column__header">
+            <div class="card-column__heading">
+              <span class="card-column__eyebrow">Signal feed</span>
+              <h2 class="card-column__title">AI summaries</h2>
+            </div>
+            <button type="button" class="card-column__export">Export view</button>
+          </div>
+          <form class="filter-panel" id="feed-filter-panel" aria-label="Feed filters" autocomplete="off">
+            <div class="filter-panel__group filter-panel__group--search">
+              <label class="filter-panel__label" for="filter-search">Search the stream</label>
+              <input class="filter-panel__input" type="search" id="filter-search" name="search" placeholder="Search summaries, notes, actors…">
+              <p class="filter-panel__hint">Use tokens such as <code>source:</code>, <code>category:</code>, or <code>tag:</code> to focus the signal.</p>
+            </div>
+            <div class="filter-panel__group">
+              <span class="filter-panel__label">Categories</span>
+              <div class="filter-panel__checkboxes">
+                <p class="filter-panel__empty">No category filters available.</p>
+              </div>
+            </div>
+            <div class="filter-panel__group">
+              <label class="filter-panel__label" for="filter-source">Sources</label>
+              <select class="filter-panel__select" id="filter-source" name="source" multiple size="1">
+                <option value="" disabled>No sources available</option>
+              </select>
+              <p class="filter-panel__hint">Hold Ctrl/Cmd to select multiple sources.</p>
+            </div>
+            <div class="filter-panel__group filter-panel__group--toggles">
+              <span class="filter-panel__label">Data enrichment</span>
+              <div class="filter-panel__checkboxes filter-panel__checkboxes--toggles">
+                <label class="filter-toggle"><input type="checkbox" id="filter-has-cves"> CVEs only</label>
+                <label class="filter-toggle"><input type="checkbox" id="filter-has-actors"> Threat actors only</label>
+                <label class="filter-toggle"><input type="checkbox" id="filter-has-iocs"> IOCs only</label>
+                <label class="filter-toggle"><input type="checkbox" id="filter-has-ttps"> TTPs only</label>
+              </div>
+            </div>
+            <div class="filter-panel__actions">
+              <button type="button" id="filter-reset">Reset filters</button>
+            </div>
+          </form>
+          <div class="card-groups">
+            <p class="card-empty">No articles available yet.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
   <aside class="detail-panel" aria-live="polite" aria-label="Article detail" aria-hidden="true" hidden>
     <div class="detail-panel__backdrop" data-detail-close></div>
     <div class="detail-panel__surface" role="dialog" aria-modal="true">
@@ -63,18 +121,19 @@
       </div>
       <div class="detail-panel__content" hidden>
         <div class="detail-panel__header">
-            <div class="detail-panel__meta">
-              <h2 class="detail-panel__title" data-detail="title"></h2>
-              <div class="detail-panel__meta-row">
-                <span class="detail-panel__source" data-detail="source"></span>
-                <span class="detail-panel__date" data-detail="date"></span>
-              </div>
-              <ul class="detail-panel__source-list" data-detail="sources"></ul>
+          <div class="detail-panel__meta">
+            <span class="detail-panel__eyebrow">Article detail</span>
+            <h2 class="detail-panel__title" data-detail="title"></h2>
+            <div class="detail-panel__meta-row">
+              <span class="detail-panel__source" data-detail="source"></span>
+              <span class="detail-panel__date" data-detail="date"></span>
             </div>
+            <ul class="detail-panel__source-list" data-detail="sources"></ul>
+          </div>
           <a class="detail-panel__link" data-detail="article" target="_blank" rel="noopener noreferrer">Open original article</a>
         </div>
         <section class="detail-panel__section">
-          <h2>AI summary</h2>
+          <h3>AI summary</h3>
           <p class="detail-panel__text" data-detail="AI-Summary"></p>
         </section>
         <section class="detail-panel__section">

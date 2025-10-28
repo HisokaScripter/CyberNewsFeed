@@ -15,6 +15,7 @@
   const cardColumn = document.querySelector('.card-column');
   const cardGroups = document.querySelector('.card-groups');
   const detailPanel = document.querySelector('.detail-panel');
+  const lastSyncLabel = document.querySelector('[data-last-sync]');
   if (!detailPanel) {
     return;
   }
@@ -311,6 +312,112 @@
   const resetButton = document.getElementById('filter-reset');
   const defaultPlaceholderHTML = placeholder ? placeholder.innerHTML : '';
 
+  function parseDateValue(raw) {
+    if (!raw && raw !== 0) {
+      return null;
+    }
+    if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+      return raw;
+    }
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      const fromNumber = new Date(raw);
+      return Number.isNaN(fromNumber.getTime()) ? null : fromNumber;
+    }
+    const stringValue = String(raw).trim();
+    if (!stringValue) {
+      return null;
+    }
+    const parsed = new Date(stringValue);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  function formatRelativeTime(date) {
+    if (!date) {
+      return 'Awaiting data';
+    }
+    const now = new Date();
+    const diffMs = Math.max(0, now.getTime() - date.getTime());
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    if (diffMs < minute) {
+      return 'Just now';
+    }
+    if (diffMs < hour) {
+      const minutes = Math.round(diffMs / minute);
+      return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
+    }
+    if (diffMs < day) {
+      const hours = Math.round(diffMs / hour);
+      return `${hours} hr${hours === 1 ? '' : 's'} ago`;
+    }
+    const days = Math.round(diffMs / day);
+    if (days <= 7) {
+      return `${days} day${days === 1 ? '' : 's'} ago`;
+    }
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function updateLastSyncDisplay() {
+    if (!lastSyncLabel) {
+      return;
+    }
+    if (!articles.length) {
+      lastSyncLabel.textContent = 'Awaiting data';
+      lastSyncLabel.classList.add('is-muted');
+      lastSyncLabel.removeAttribute('title');
+      return;
+    }
+
+    let newest = null;
+    let fallbackLabel = '';
+    const candidateKeys = ['updated_at', 'updated', 'last_seen', 'date', 'published_at', 'published'];
+    articles.forEach((article) => {
+      if (!article || typeof article !== 'object') {
+        return;
+      }
+      for (const key of candidateKeys) {
+        if (!(key in article)) {
+          continue;
+        }
+        const raw = article[key];
+        const parsed = parseDateValue(raw);
+        if (parsed) {
+          if (!newest || parsed > newest) {
+            newest = parsed;
+          }
+        } else if (!fallbackLabel && raw) {
+          const stringValue = String(raw).trim();
+          if (stringValue) {
+            fallbackLabel = stringValue;
+          }
+        }
+      }
+    });
+
+    if (!newest) {
+      if (fallbackLabel) {
+        lastSyncLabel.textContent = fallbackLabel;
+        lastSyncLabel.classList.remove('is-muted');
+        lastSyncLabel.removeAttribute('title');
+      } else {
+        lastSyncLabel.textContent = 'Awaiting data';
+        lastSyncLabel.classList.add('is-muted');
+        lastSyncLabel.removeAttribute('title');
+      }
+      return;
+    }
+
+    lastSyncLabel.textContent = formatRelativeTime(newest);
+    lastSyncLabel.title = newest.toLocaleString();
+    lastSyncLabel.classList.remove('is-muted');
+  }
+
   let layoutFrame = null;
 
   function updateLayoutMetrics() {
@@ -340,6 +447,7 @@
     });
   }
 
+  updateLastSyncDisplay();
   queueLayoutMetrics();
   window.addEventListener('resize', queueLayoutMetrics);
   window.addEventListener('orientationchange', queueLayoutMetrics);
