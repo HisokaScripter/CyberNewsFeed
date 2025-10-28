@@ -31,6 +31,7 @@
     link: detailPanel.querySelector('[data-detail="article"]'),
     sourceList: detailPanel.querySelector('[data-detail="sources"]'),
     summary: detailPanel.querySelector('[data-detail="AI-Summary"]'),
+    content: detailPanel.querySelector('[data-detail="content"]'),
     notes: detailPanel.querySelector('[data-detail="notes"]'),
     iocs: detailPanel.querySelector('[data-detail="iocs"]'),
     ttps: detailPanel.querySelector('[data-detail="TTPs"]'),
@@ -219,6 +220,68 @@
     }
   }
 
+  function renderRichText(container, value, fallback) {
+    if (!container) {
+      return;
+    }
+    clearNode(container);
+
+    const segments = [];
+
+    const pushSegment = (segment) => {
+      if (segment === null || segment === undefined) {
+        return;
+      }
+      const stringValue = String(segment).trim();
+      if (!stringValue) {
+        return;
+      }
+      stringValue.split(/\r?\n+/).forEach((part) => {
+        const trimmed = part.trim();
+        if (trimmed) {
+          segments.push(trimmed);
+        }
+      });
+    };
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        if (entry && typeof entry === 'object' && 'text' in entry) {
+          pushSegment(entry.text);
+        } else {
+          pushSegment(entry);
+        }
+      });
+    } else if (value && typeof value === 'object') {
+      if (typeof value.text === 'string') {
+        pushSegment(value.text);
+      }
+      if (Array.isArray(value.paragraphs)) {
+        value.paragraphs.forEach((paragraph) => pushSegment(paragraph));
+      } else if (value.content) {
+        pushSegment(value.content);
+      } else {
+        pushSegment(JSON.stringify(value));
+      }
+    } else if (value || value === 0) {
+      pushSegment(value);
+    }
+
+    if (!segments.length) {
+      const empty = document.createElement('p');
+      empty.className = 'detail-panel__empty';
+      empty.textContent = fallback;
+      container.appendChild(empty);
+      return;
+    }
+
+    segments.forEach((segment) => {
+      const paragraph = document.createElement('p');
+      paragraph.textContent = segment;
+      container.appendChild(paragraph);
+    });
+  }
+
   function setText(node, value, fallback) {
     if (!node) {
       return;
@@ -283,6 +346,8 @@
     renderPills(refs.ttps, article.TTPs, 'No tactics or techniques listed.');
     renderPills(refs.iocs, article.iocs, 'No indicators extracted.');
     renderCves(refs.cves, article.CVEs);
+    const contentValue = article.content ?? article.contents ?? article.body ?? '';
+    renderRichText(refs.content, contentValue, 'No additional content available.');
   }
 
 

@@ -42,7 +42,6 @@ def build_html(
         if not isinstance(article, Mapping):
             continue
         sanitized = dict(article)
-        sanitized.pop("contents", None)
         sanitized_articles.append(sanitized)
 
     def _raw_text(value):
@@ -152,6 +151,8 @@ def build_html(
             _raw_text(article.get('title', '')),
             summary_text,
             _raw_text(article.get('notes', '')),
+            _raw_text(article.get('content', '')),
+            _raw_text(article.get('contents', '')),
             tags_text,
             fallback_source,
             " ".join(source_names),
