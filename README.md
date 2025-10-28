@@ -15,11 +15,17 @@ Because everything is static, you can host the generated dashboard on any static
 Below is a minimal end-to-end run that you can reproduce immediately after cloning the repo. It collects articles, saves them to the default `cybersec_news.json`, and rebuilds the dashboard:
 
 ```bash
-python fetch_articles.py --print-summary
-python build_html.py cybersec_news.json --output index.html
+python fetch_articles.py
+python build_html.py
 ```
 
-After the commands finish, you will have:
+Both commands walk you through a short interactive setup:
+
+- The first run creates `cybernewsfeed_config.json` and asks where the JSON feed, optional CSV, and HTML dashboard should live.
+- Later runs reuse those defaults, giving you a chance to press Enter and keep them or type a new path on demand.
+- You can choose to print a textual summary of the scraped articles by answering the prompt.
+
+After completing the prompts you will have:
 
 - `cybersec_news.json` – machine-readable article data saved (and reused) by the scraper.
 - `index.html` – an interactive dashboard you can open in a browser.
@@ -44,20 +50,13 @@ A shortened snippet from the JSON file looks like this:
 
 ## Resuming and incremental updates
 
-Running `python fetch_articles.py` multiple times will continue building on the existing dataset:
+Running `python fetch_articles.py` multiple times continues building on the existing dataset:
 
-- The scraper loads `cybersec_news.json` (or the file provided via `--output`) at startup and keeps previously saved articles.
+- The scraper loads the JSON file you selected during the prompt (defaulting to `cybersec_news.json`) and keeps previously saved articles.
 - Newly discovered items are appended, while duplicates are skipped using the `.parsed.txt` cache file.
 - You can pause and resume long scraping sessions—the JSON file and cache are persisted after every successful article.
 
-If you want to maintain separate feeds, supply a different output path:
-
-```bash
-python fetch_articles.py --output data/darkweb.json
-python build_html.py data/darkweb.json --output darkweb.html
-```
-
-Each custom JSON file gets its own companion cache (for example `data/darkweb.parsed.txt`), so rerunning the scraper with the same `--output` path resumes exactly where it left off.
+To maintain separate feeds, simply enter a different export path when prompted (for example `data/darkweb.json`). The accompanying cache file—`data/darkweb.parsed.txt`—is created automatically, letting you rerun the scraper with that same path to resume the feed.
 
 ## Features
 
@@ -88,14 +87,15 @@ If you do not need Cloudflare bypassing or AI enrichment you can omit the option
 ```
 cybernewsfeed/        Core package with the scraper and HTML builder utilities
   assets/             JavaScript and CSS bundled into the generated dashboard
-  templates/          Jinja-style HTML template used during rendering
-build_html.py         CLI for turning a JSON export into index.html
-fetch_articles.py     CLI entry point for scraping and exporting feeds
+  templates/          HTML template used during rendering
+build_html.py         Interactive helper for turning a JSON export into index.html
+fetch_articles.py     Interactive entry point for scraping and exporting feeds
 index.html            Example output produced by `build_html.py`
 ```
 
 ## Optional configuration
 
+- **Dashboard defaults:** edit `cybernewsfeed_config.json` (or rerun the scripts and agree to overwrite it) to change the default JSON, CSV, HTML, template, or assets locations used by the prompts.
 - **TOR routing:** set the `TOR_PROXY` environment variable (defaults to `socks5h://127.0.0.1:9050`) if you want the dark web feeds to go through a different proxy.
 - **LM Studio model:** adjust `CyberSecScraper.aiModel` in `cybernewsfeed/scraper.py` to match a locally available model. When the `lmstudio` package is not installed, AI enrichment is skipped automatically.
 - **Feed customization:** extend the `Feeds` or `DarkWebFeeds` dictionaries in `cybernewsfeed/scraper.py` to add or remove sources.
