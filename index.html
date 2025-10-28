@@ -73,6 +73,47 @@
       </section>
     </div>
   </aside>
+  <aside class="help-panel" id="help-panel" aria-hidden="true" hidden>
+    <div class="help-panel__backdrop" data-help-close></div>
+    <div class="help-panel__surface" role="dialog" aria-modal="true" aria-labelledby="help-panel-title">
+      <button type="button" class="help-panel__close" data-help-close aria-label="Close help center">&times;</button>
+      <h2 class="help-panel__title" id="help-panel-title">Help center</h2>
+      <p class="help-panel__intro">Quick tips for navigating and customizing the CyberSignal stream.</p>
+      <section class="help-panel__section">
+        <h3>Workflow shortcuts</h3>
+        <ul class="help-panel__list">
+          <li>Use <kbd>source:</kbd>, <kbd>category:</kbd>, or <kbd>tag:</kbd> tokens in search to narrow the signal.</li>
+          <li>Toggle enrichment filters to isolate items with CVEs, actors, IOCs, or TTPs.</li>
+          <li>Save frequently used combinations as named views for one-click access later.</li>
+        </ul>
+      </section>
+      <section class="help-panel__section">
+        <h3>Quick actions</h3>
+        <div class="help-panel__actions">
+          <button type="button" class="help-panel__action" data-help-filter="cves">Show CVE coverage</button>
+          <button type="button" class="help-panel__action" data-help-filter="actors">Highlight threat actors</button>
+          <button type="button" class="help-panel__action" data-help-filter="reset">Reset filters</button>
+        </div>
+      </section>
+    </div>
+  </aside>
+  <div class="modal" id="view-modal" aria-hidden="true" hidden>
+    <div class="modal__backdrop" data-view-modal-close></div>
+    <div class="modal__surface" role="dialog" aria-modal="true" aria-labelledby="view-modal-title">
+      <button type="button" class="modal__close" data-view-modal-close aria-label="Close save view dialog">&times;</button>
+      <h2 class="modal__title" id="view-modal-title">Save current view</h2>
+      <p class="modal__description">Capture the current filters and quick access them from the sidebar later.</p>
+      <form class="modal__form" id="view-modal-form">
+        <label class="modal__label" for="view-modal-name">View name</label>
+        <input class="modal__input" type="text" id="view-modal-name" name="view_name" required maxlength="80" autocomplete="off" placeholder="e.g. Active CVE surge">
+        <div class="modal__actions">
+          <button type="button" class="modal__secondary" data-view-modal-close>Cancel</button>
+          <button type="submit" class="modal__primary">Save view</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="toast" id="app-toast" role="status" aria-live="polite" hidden></div>
   <script id="article-data" type="application/json">[]</script>
   <script src="app.js"></script>
 </body>
