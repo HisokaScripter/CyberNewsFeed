@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CyberSignal Intelligence Stream</title>
+  <title>CyberSignal Intelligence Board</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,21 +16,34 @@
         <span class="topbar__logo" aria-hidden="true">CN</span>
         <div class="topbar__text">
           <span class="topbar__product">CyberSignal</span>
-          <span class="topbar__subtitle">Live situational intelligence</span>
+          <span class="topbar__subtitle">Live threat insights inspired by Dataminr</span>
         </div>
       </div>
       <div class="topbar__actions">
-        <button type="button" class="topbar__action topbar__action--primary">Create new view</button>
-        <button type="button" class="topbar__action">Help center</button>
-        <button type="button" class="topbar__avatar" aria-label="Open profile menu">AM</button>
+        <button type="button" class="topbar__action topbar__action--primary" data-action="create-view">Create briefing</button>
+        <button type="button" class="topbar__action" data-action="help-center">Manage watchlists</button>
+        <button
+          type="button"
+          class="topbar__avatar"
+          data-action="profile-menu"
+          aria-label="Open profile menu"
+          aria-haspopup="true"
+          aria-expanded="false"
+          aria-controls="profile-menu"
+        >AM</button>
       </div>
     </header>
+    <div class="profile-menu" id="profile-menu" role="menu" hidden>
+      <button type="button" class="profile-menu__item" role="menuitem" data-menu-action="profile">View profile</button>
+      <button type="button" class="profile-menu__item" role="menuitem" data-menu-action="settings">Account settings</button>
+      <button type="button" class="profile-menu__item profile-menu__item--destructive" role="menuitem" data-menu-action="signout">Sign out</button>
+    </div>
     <div class="app-shell__body">
       <nav class="sidebar" aria-label="Workspace navigation">
         <div class="sidebar__section">
           <h2 class="sidebar__heading">Workspace</h2>
           <ul class="sidebar__menu">
-            <li><span class="sidebar__item sidebar__item--active">Intelligence stream</span></li>
+            <li><span class="sidebar__item sidebar__item--active">Intelligence board</span></li>
             <li><span class="sidebar__item">Saved briefings</span></li>
             <li><span class="sidebar__item">Shared alerts</span></li>
           </ul>
@@ -41,14 +54,29 @@
             <li><span class="sidebar__item">Critical infrastructure</span></li>
             <li><span class="sidebar__item">Ransomware operators</span></li>
             <li><span class="sidebar__item">Emerging CVEs</span></li>
+            <li><span class="sidebar__item">Executive protection</span></li>
+          </ul>
+        </div>
+        <div class="sidebar__section">
+          <h2 class="sidebar__heading">Quick filters</h2>
+          <ul class="sidebar__menu sidebar__menu--chips">
+            <li><span class="sidebar__chip">High urgency</span></li>
+            <li><span class="sidebar__chip">Verified sources</span></li>
+            <li><span class="sidebar__chip">Active exploits</span></li>
+          </ul>
+        </div>
+        <div class="sidebar__section">
+          <h2 class="sidebar__heading">Saved views</h2>
+          <ul class="sidebar__menu sidebar__menu--interactive" data-saved-views>
+            <li class="sidebar__empty" data-saved-empty>No saved views yet.</li>
           </ul>
         </div>
       </nav>
       <main class="main-feed" role="main">
         <header class="main-feed__header">
-          <div>
+          <div class="main-feed__intro">
             <h1 class="main-feed__title">Realtime cyber intelligence</h1>
-            <p class="main-feed__subtitle">Curated signal inspired by Dataminr's workspace — tuned for security analysts.</p>
+            <p class="main-feed__subtitle">Column-based workflow inspired by Dataminr with live enrichment for every signal.</p>
           </div>
           <dl class="signal-metrics" aria-label="Feed summary metrics">
             <div class="signal-metric">
@@ -56,7 +84,7 @@
               <dd data-count-label>$article_count_label</dd>
             </div>
             <div class="signal-metric">
-              <dt>Feed health</dt>
+              <dt>Feed quality</dt>
               <dd class="signal-metric__status">Stable</dd>
             </div>
             <div class="signal-metric">
@@ -65,13 +93,15 @@
             </div>
           </dl>
         </header>
-        <section class="card-column" aria-label="Summarised articles">
+        <section class="card-column" aria-label="Categorised intelligence stream">
           <div class="card-column__header">
             <div class="card-column__heading">
-              <span class="card-column__eyebrow">Signal feed</span>
-              <h2 class="card-column__title">AI summaries</h2>
+              <span class="card-column__eyebrow">Live stream</span>
+              <h2 class="card-column__title">Category board</h2>
             </div>
-            <button type="button" class="card-column__export">Export view</button>
+            <div class="card-column__actions">
+              <button type="button" class="card-column__export" data-action="export-view">Export current view</button>
+            </div>
           </div>
           <form class="filter-panel" id="feed-filter-panel" aria-label="Feed filters" autocomplete="off">
             <div class="filter-panel__group filter-panel__group--search">
@@ -105,7 +135,7 @@
               <button type="button" id="filter-reset">Reset filters</button>
             </div>
           </form>
-          <div class="card-groups">
+          <div class="card-groups" role="list">
             $cards_markup
           </div>
         </section>
@@ -115,12 +145,12 @@
   <aside class="detail-panel" aria-live="polite" aria-label="Article detail" aria-hidden="true" hidden>
     <div class="detail-panel__backdrop" data-detail-close></div>
     <div class="detail-panel__surface" role="dialog" aria-modal="true">
-      <button type="button" class="detail-panel__close" data-detail-close aria-label="Close panel">&times;</button>
+      <button type="button" class="detail-panel__close" data-detail-close aria-label="Close detail">&times;</button>
       <div class="detail-panel__placeholder">
         <p>Select a summary to explore full intelligence, enrichment data, and source material.</p>
       </div>
       <div class="detail-panel__content" hidden>
-        <div class="detail-panel__header">
+        <header class="detail-panel__header">
           <div class="detail-panel__meta">
             <span class="detail-panel__eyebrow">Article detail</span>
             <h2 class="detail-panel__title" data-detail="title"></h2>
@@ -131,10 +161,14 @@
             <ul class="detail-panel__source-list" data-detail="sources"></ul>
           </div>
           <a class="detail-panel__link" data-detail="article" target="_blank" rel="noopener noreferrer">Open original article</a>
-        </div>
+        </header>
         <section class="detail-panel__section">
           <h3>AI summary</h3>
           <p class="detail-panel__text" data-detail="AI-Summary"></p>
+        </section>
+        <section class="detail-panel__section">
+          <h3>Full content</h3>
+          <div class="detail-panel__rich-text" data-detail="content"></div>
         </section>
         <section class="detail-panel__section">
           <h3>Threat actors</h3>
@@ -159,6 +193,47 @@
       </div>
     </div>
   </aside>
+  <aside class="help-panel" id="help-panel" aria-hidden="true" hidden>
+    <div class="help-panel__backdrop" data-help-close></div>
+    <div class="help-panel__surface" role="dialog" aria-modal="true" aria-labelledby="help-panel-title">
+      <button type="button" class="help-panel__close" data-help-close aria-label="Close help center">&times;</button>
+      <h2 class="help-panel__title" id="help-panel-title">Help center</h2>
+      <p class="help-panel__intro">Quick tips for navigating and customizing the CyberSignal stream.</p>
+      <section class="help-panel__section">
+        <h3>Workflow shortcuts</h3>
+        <ul class="help-panel__list">
+          <li>Use <kbd>source:</kbd>, <kbd>category:</kbd>, or <kbd>tag:</kbd> tokens in search to narrow the signal.</li>
+          <li>Toggle enrichment filters to isolate items with CVEs, actors, IOCs, or TTPs.</li>
+          <li>Save frequently used combinations as named views for one-click access later.</li>
+        </ul>
+      </section>
+      <section class="help-panel__section">
+        <h3>Quick actions</h3>
+        <div class="help-panel__actions">
+          <button type="button" class="help-panel__action" data-help-filter="cves">Show CVE coverage</button>
+          <button type="button" class="help-panel__action" data-help-filter="actors">Highlight threat actors</button>
+          <button type="button" class="help-panel__action" data-help-filter="reset">Reset filters</button>
+        </div>
+      </section>
+    </div>
+  </aside>
+  <div class="modal" id="view-modal" aria-hidden="true" hidden>
+    <div class="modal__backdrop" data-view-modal-close></div>
+    <div class="modal__surface" role="dialog" aria-modal="true" aria-labelledby="view-modal-title">
+      <button type="button" class="modal__close" data-view-modal-close aria-label="Close save view dialog">&times;</button>
+      <h2 class="modal__title" id="view-modal-title">Save current view</h2>
+      <p class="modal__description">Capture the current filters and quick access them from the sidebar later.</p>
+      <form class="modal__form" id="view-modal-form">
+        <label class="modal__label" for="view-modal-name">View name</label>
+        <input class="modal__input" type="text" id="view-modal-name" name="view_name" required maxlength="80" autocomplete="off" placeholder="e.g. Active CVE surge">
+        <div class="modal__actions">
+          <button type="button" class="modal__secondary" data-view-modal-close>Cancel</button>
+          <button type="submit" class="modal__primary">Save view</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="toast" id="app-toast" role="status" aria-live="polite" hidden></div>
   <script id="article-data" type="application/json">$articles_json</script>
   <script src="app.js"></script>
 </body>

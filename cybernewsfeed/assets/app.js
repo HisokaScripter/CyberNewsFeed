@@ -23,6 +23,23 @@
   const content = detailPanel.querySelector('.detail-panel__content');
   const backdrop = detailPanel.querySelector('.detail-panel__backdrop');
   const closeControls = Array.from(detailPanel.querySelectorAll('[data-detail-close]'));
+  const exportButton = document.querySelector('[data-action="export-view"]');
+  const createViewButton = document.querySelector('[data-action="create-view"]');
+  const helpButton = document.querySelector('[data-action="help-center"]');
+  const profileButton = document.querySelector('[data-action="profile-menu"]');
+  const profileMenu = document.getElementById('profile-menu');
+  const helpPanel = document.getElementById('help-panel');
+  const helpBackdrop = helpPanel ? helpPanel.querySelector('.help-panel__backdrop') : null;
+  const helpCloseButtons = Array.from(document.querySelectorAll('[data-help-close]'));
+  const helpQuickActionButtons = Array.from(document.querySelectorAll('[data-help-filter]'));
+  const viewModal = document.getElementById('view-modal');
+  const viewModalBackdrop = viewModal ? viewModal.querySelector('.modal__backdrop') : null;
+  const viewModalCloseButtons = Array.from(document.querySelectorAll('[data-view-modal-close]'));
+  const viewModalForm = document.getElementById('view-modal-form');
+  const viewModalInput = document.getElementById('view-modal-name');
+  const toastNode = document.getElementById('app-toast');
+  const savedViewsList = document.querySelector('[data-saved-views]');
+  const savedViewsEmpty = document.querySelector('[data-saved-empty]');
 
   const refs = {
     title: detailPanel.querySelector('[data-detail="title"]'),
@@ -31,6 +48,7 @@
     link: detailPanel.querySelector('[data-detail="article"]'),
     sourceList: detailPanel.querySelector('[data-detail="sources"]'),
     summary: detailPanel.querySelector('[data-detail="AI-Summary"]'),
+    content: detailPanel.querySelector('[data-detail="content"]'),
     notes: detailPanel.querySelector('[data-detail="notes"]'),
     iocs: detailPanel.querySelector('[data-detail="iocs"]'),
     ttps: detailPanel.querySelector('[data-detail="TTPs"]'),
@@ -39,6 +57,10 @@
   };
 
   let closeTimer = null;
+  let toastTimer = null;
+  let lastFocusedElement = null;
+  let savedViews = [];
+  const SAVED_VIEWS_STORAGE_KEY = 'cybernewsfeed:savedViews';
 
   function showDetailPanel() {
     if (closeTimer) {
@@ -69,6 +91,201 @@
       }
       closeTimer = null;
     }, 320);
+  }
+
+  function storeFocusReference() {
+    lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+
+  function restoreFocusReference() {
+    if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+      try {
+        lastFocusedElement.focus({ preventScroll: true });
+      } catch (error) {
+        lastFocusedElement.focus();
+      }
+    }
+    lastFocusedElement = null;
+  }
+
+  function showToast(message, type = 'info') {
+    if (!toastNode) {
+      return;
+    }
+    toastNode.textContent = message;
+    if (type) {
+      toastNode.setAttribute('data-toast-type', type);
+    } else {
+      toastNode.removeAttribute('data-toast-type');
+    }
+    toastNode.hidden = false;
+    requestAnimationFrame(() => {
+      toastNode.classList.add('is-visible');
+    });
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+    }
+    toastTimer = window.setTimeout(() => {
+      toastNode.classList.remove('is-visible');
+      toastTimer = window.setTimeout(() => {
+        toastNode.hidden = true;
+        toastNode.textContent = '';
+        toastNode.removeAttribute('data-toast-type');
+        toastTimer = null;
+      }, 320);
+    }, 2800);
+  }
+
+  function isHelpPanelOpen() {
+    return Boolean(helpPanel && !helpPanel.hidden);
+  }
+
+  function openHelpPanel() {
+    if (!helpPanel) {
+      return;
+    }
+    storeFocusReference();
+    helpPanel.hidden = false;
+    helpPanel.setAttribute('aria-hidden', 'false');
+    const focusable = helpPanel.querySelector('button, [href], input, select, textarea');
+    if (focusable && typeof focusable.focus === 'function') {
+      focusable.focus();
+    }
+  }
+
+  function closeHelpPanel(options = {}) {
+    if (!helpPanel) {
+      return;
+    }
+    helpPanel.setAttribute('aria-hidden', 'true');
+    helpPanel.hidden = true;
+    if (!options.silent) {
+      restoreFocusReference();
+    }
+  }
+
+  function isViewModalOpen() {
+    return Boolean(viewModal && !viewModal.hidden);
+  }
+
+  function openViewModal(defaultName = '') {
+    if (!viewModal) {
+      return;
+    }
+    storeFocusReference();
+    viewModal.hidden = false;
+    viewModal.setAttribute('aria-hidden', 'false');
+    if (viewModalForm) {
+      viewModalForm.reset();
+    }
+    if (viewModalInput) {
+      viewModalInput.value = defaultName;
+      viewModalInput.focus();
+      viewModalInput.select();
+    }
+  }
+
+  function closeViewModal(options = {}) {
+    if (!viewModal) {
+      return;
+    }
+    viewModal.setAttribute('aria-hidden', 'true');
+    viewModal.hidden = true;
+    if (viewModalForm) {
+      viewModalForm.reset();
+    }
+    if (!options.silent) {
+      restoreFocusReference();
+    }
+  }
+
+  function isProfileMenuOpen() {
+    return Boolean(profileMenu && !profileMenu.hidden);
+  }
+
+  function openProfileMenu() {
+    if (!profileMenu || !profileButton) {
+      return;
+    }
+    profileMenu.hidden = false;
+    profileButton.setAttribute('aria-expanded', 'true');
+    storeFocusReference();
+    const firstItem = profileMenu.querySelector('button');
+    if (firstItem && typeof firstItem.focus === 'function') {
+      firstItem.focus();
+    }
+  }
+
+  function closeProfileMenu(options = {}) {
+    if (!profileMenu || !profileButton) {
+      return;
+    }
+    profileMenu.hidden = true;
+    profileButton.setAttribute('aria-expanded', 'false');
+    if (!options.silent) {
+      restoreFocusReference();
+    }
+  }
+
+  function toggleProfileMenu() {
+    if (isProfileMenuOpen()) {
+      closeProfileMenu();
+    } else {
+      openProfileMenu();
+    }
+  }
+
+  function generateViewId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `view-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function createDefaultViewName() {
+    const now = new Date();
+    try {
+      return `View ${now.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })}`;
+    } catch (error) {
+      return `View ${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+    }
+  }
+
+  function applyHelpQuickAction(action) {
+    if (!action) {
+      return;
+    }
+    const normalized = action.toLowerCase();
+    if (normalized === 'reset') {
+      resetFilters();
+      closeHelpPanel({ silent: true });
+      restoreFocusReference();
+      return;
+    }
+    if (normalized === 'cves') {
+      if (filters.cves) filters.cves.checked = true;
+      if (filters.actors) filters.actors.checked = false;
+      if (filters.iocs) filters.iocs.checked = false;
+      if (filters.ttps) filters.ttps.checked = false;
+      applyFilters();
+      showToast('Filtered to items enriched with CVEs.', 'success');
+    } else if (normalized === 'actors') {
+      if (filters.actors) filters.actors.checked = true;
+      if (filters.cves) filters.cves.checked = false;
+      if (filters.iocs) filters.iocs.checked = false;
+      if (filters.ttps) filters.ttps.checked = false;
+      applyFilters();
+      showToast('Highlighting items mentioning threat actors.', 'success');
+    } else {
+      return;
+    }
+    closeHelpPanel({ silent: true });
+    restoreFocusReference();
   }
 
   function clearNode(node) {
@@ -219,6 +436,68 @@
     }
   }
 
+  function renderRichText(container, value, fallback) {
+    if (!container) {
+      return;
+    }
+    clearNode(container);
+
+    const segments = [];
+
+    const pushSegment = (segment) => {
+      if (segment === null || segment === undefined) {
+        return;
+      }
+      const stringValue = String(segment).trim();
+      if (!stringValue) {
+        return;
+      }
+      stringValue.split(/\r?\n+/).forEach((part) => {
+        const trimmed = part.trim();
+        if (trimmed) {
+          segments.push(trimmed);
+        }
+      });
+    };
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        if (entry && typeof entry === 'object' && 'text' in entry) {
+          pushSegment(entry.text);
+        } else {
+          pushSegment(entry);
+        }
+      });
+    } else if (value && typeof value === 'object') {
+      if (typeof value.text === 'string') {
+        pushSegment(value.text);
+      }
+      if (Array.isArray(value.paragraphs)) {
+        value.paragraphs.forEach((paragraph) => pushSegment(paragraph));
+      } else if (value.content) {
+        pushSegment(value.content);
+      } else {
+        pushSegment(JSON.stringify(value));
+      }
+    } else if (value || value === 0) {
+      pushSegment(value);
+    }
+
+    if (!segments.length) {
+      const empty = document.createElement('p');
+      empty.className = 'detail-panel__empty';
+      empty.textContent = fallback;
+      container.appendChild(empty);
+      return;
+    }
+
+    segments.forEach((segment) => {
+      const paragraph = document.createElement('p');
+      paragraph.textContent = segment;
+      container.appendChild(paragraph);
+    });
+  }
+
   function setText(node, value, fallback) {
     if (!node) {
       return;
@@ -236,6 +515,236 @@
     } else {
       node.textContent = String(value);
     }
+  }
+
+  function loadSavedViews() {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return [];
+    }
+    try {
+      const raw = window.localStorage.getItem(SAVED_VIEWS_STORAGE_KEY);
+      if (!raw) {
+        return [];
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed
+        .map((entry) => (entry && typeof entry === 'object' ? entry : null))
+        .filter((entry) => entry && typeof entry.id === 'string' && typeof entry.name === 'string' && entry.state)
+        .map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          createdAt: entry.createdAt || entry.savedAt || null,
+          state: entry.state
+        }));
+    } catch (error) {
+      console.warn('Unable to load saved views from storage.', error);
+      return [];
+    }
+  }
+
+  function persistSavedViews(list) {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+    try {
+      window.localStorage.setItem(SAVED_VIEWS_STORAGE_KEY, JSON.stringify(list));
+    } catch (error) {
+      console.warn('Unable to persist saved views.', error);
+      showToast('Unable to persist saved views to storage.', 'warning');
+    }
+  }
+
+  function renderSavedViews() {
+    if (!savedViewsList) {
+      return;
+    }
+    clearNode(savedViewsList);
+    if (!savedViews.length) {
+      if (savedViewsEmpty) {
+        savedViewsEmpty.hidden = false;
+        savedViewsList.appendChild(savedViewsEmpty);
+      }
+      return;
+    }
+    if (savedViewsEmpty) {
+      savedViewsEmpty.hidden = true;
+    }
+    savedViews.forEach((view) => {
+      const item = document.createElement('li');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'saved-view';
+
+      const applyButton = document.createElement('button');
+      applyButton.type = 'button';
+      applyButton.className = 'saved-view__apply';
+      applyButton.setAttribute('data-saved-view', view.id);
+
+      const nameNode = document.createElement('span');
+      nameNode.textContent = view.name;
+      applyButton.appendChild(nameNode);
+
+      const meta = document.createElement('span');
+      meta.className = 'saved-view__meta';
+      const createdDate = parseDateValue(view.createdAt);
+      if (createdDate) {
+        meta.textContent = `Saved ${formatRelativeTime(createdDate)}`;
+      } else {
+        meta.textContent = 'Saved view';
+      }
+      applyButton.appendChild(meta);
+
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'saved-view__remove';
+      removeButton.setAttribute('data-saved-view-remove', view.id);
+      removeButton.setAttribute('aria-label', `Remove saved view ${view.name}`);
+      removeButton.textContent = '×';
+
+      wrapper.appendChild(applyButton);
+      wrapper.appendChild(removeButton);
+      item.appendChild(wrapper);
+      savedViewsList.appendChild(item);
+    });
+  }
+
+  function gatherCurrentFilterState() {
+    const categoryCheckboxes = filters.categories || [];
+    const selectedCategories = categoryCheckboxes
+      .filter((checkbox) => checkbox.checked)
+      .map((checkbox) => checkbox.value);
+    const limitedCategories = selectedCategories.length > 0 && selectedCategories.length < categoryCheckboxes.length;
+    const selectedSources = Array.from(filters.source?.selectedOptions || [])
+      .map((option) => option.value)
+      .filter((value) => value);
+    return {
+      search: filters.search ? filters.search.value.trim() : '',
+      sources: selectedSources,
+      categories: {
+        selected: selectedCategories,
+        limited: limitedCategories
+      },
+      toggles: {
+        cves: Boolean(filters.cves?.checked),
+        actors: Boolean(filters.actors?.checked),
+        iocs: Boolean(filters.iocs?.checked),
+        ttps: Boolean(filters.ttps?.checked)
+      }
+    };
+  }
+
+  function applySavedView(view) {
+    if (!view || !view.state) {
+      return;
+    }
+    const state = view.state || {};
+    if (filters.search) {
+      filters.search.value = state.search || '';
+    }
+    if (filters.source) {
+      const selectedSet = new Set(Array.isArray(state.sources) ? state.sources : []);
+      Array.from(filters.source.options || []).forEach((option) => {
+        option.selected = selectedSet.has(option.value);
+      });
+    }
+    const categoryCheckboxes = filters.categories || [];
+    const selectedCategories = new Set(Array.isArray(state.categories?.selected) ? state.categories.selected : []);
+    const limited = Boolean(state.categories?.limited) && selectedCategories.size > 0;
+    categoryCheckboxes.forEach((checkbox) => {
+      if (!limited) {
+        checkbox.checked = true;
+      } else {
+        checkbox.checked = selectedCategories.has(checkbox.value);
+      }
+    });
+    if (filters.cves) filters.cves.checked = Boolean(state.toggles?.cves);
+    if (filters.actors) filters.actors.checked = Boolean(state.toggles?.actors);
+    if (filters.iocs) filters.iocs.checked = Boolean(state.toggles?.iocs);
+    if (filters.ttps) filters.ttps.checked = Boolean(state.toggles?.ttps);
+    applyFilters();
+    showToast(`Applied view "${view.name}"`, 'success');
+  }
+
+  function removeSavedView(id) {
+    const originalLength = savedViews.length;
+    savedViews = savedViews.filter((view) => view.id !== id);
+    if (savedViews.length !== originalLength) {
+      persistSavedViews(savedViews);
+      renderSavedViews();
+      showToast('Saved view removed.', 'info');
+    }
+  }
+
+  function upsertSavedView(name) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      showToast('Please provide a name for the view.', 'warning');
+      if (viewModalInput) {
+        viewModalInput.focus();
+      }
+      return;
+    }
+    const nextState = gatherCurrentFilterState();
+    const existingIndex = savedViews.findIndex((entry) => entry.name.toLowerCase() === trimmedName.toLowerCase());
+    const nowIso = new Date().toISOString();
+    if (existingIndex >= 0) {
+      savedViews[existingIndex] = {
+        ...savedViews[existingIndex],
+        name: trimmedName,
+        createdAt: nowIso,
+        state: nextState
+      };
+      showToast(`Updated view "${trimmedName}"`, 'success');
+    } else {
+      savedViews.push({
+        id: generateViewId(),
+        name: trimmedName,
+        createdAt: nowIso,
+        state: nextState
+      });
+      showToast(`Saved view "${trimmedName}" created.`, 'success');
+    }
+    savedViews.sort((a, b) => {
+      const aDate = parseDateValue(a.createdAt);
+      const bDate = parseDateValue(b.createdAt);
+      const aTime = aDate ? aDate.getTime() : 0;
+      const bTime = bDate ? bDate.getTime() : 0;
+      return bTime - aTime;
+    });
+    persistSavedViews(savedViews);
+    renderSavedViews();
+  }
+
+  function handleViewModalSubmit(event) {
+    event.preventDefault();
+    const name = viewModalInput ? viewModalInput.value : '';
+    upsertSavedView(name || '');
+    closeViewModal({ silent: true });
+    restoreFocusReference();
+  }
+
+  function handleProfileMenuAction(action) {
+    if (!action) {
+      return;
+    }
+    const normalized = action.toLowerCase();
+    let message = '';
+    let tone = 'info';
+    if (normalized === 'profile') {
+      message = 'Profile insights coming soon.';
+    } else if (normalized === 'settings') {
+      message = 'Account settings are not available in this offline preview.';
+    } else if (normalized === 'signout') {
+      message = 'Sign out is disabled in the static demo.';
+      tone = 'warning';
+    } else {
+      return;
+    }
+    closeProfileMenu({ silent: true });
+    restoreFocusReference();
+    showToast(message, tone);
   }
 
   function updateDetail(article) {
@@ -283,6 +792,8 @@
     renderPills(refs.ttps, article.TTPs, 'No tactics or techniques listed.');
     renderPills(refs.iocs, article.iocs, 'No indicators extracted.');
     renderCves(refs.cves, article.CVEs);
+    const contentValue = article.content ?? article.contents ?? article.body ?? '';
+    renderRichText(refs.content, contentValue, 'No additional content available.');
   }
 
 
@@ -486,8 +997,29 @@
   }
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && detailPanel.classList.contains('is-visible')) {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    let handled = false;
+    if (isViewModalOpen()) {
+      closeViewModal();
+      handled = true;
+    }
+    if (isHelpPanelOpen()) {
+      closeHelpPanel();
+      handled = true;
+    }
+    if (isProfileMenuOpen()) {
+      closeProfileMenu();
+      handled = true;
+    }
+    if (detailPanel.classList.contains('is-visible')) {
       closePanelAndClear();
+      handled = true;
+    }
+    if (handled) {
+      event.preventDefault();
+      event.stopPropagation();
     }
   });
 
@@ -567,6 +1099,41 @@
       }
     }
     updateDetail(article);
+  }
+
+  function getVisibleArticles() {
+    return cards
+      .filter((card) => !card.hidden)
+      .map((card) => Number(card.getAttribute('data-index')))
+      .filter((index) => Number.isFinite(index) && index >= 0 && index < articles.length)
+      .map((index) => articles[index]);
+  }
+
+  function exportVisibleArticles() {
+    const visibleArticles = getVisibleArticles();
+    if (!visibleArticles.length) {
+      showToast('No items available to export.', 'warning');
+      return;
+    }
+    try {
+      const payload = JSON.stringify(visibleArticles, null, 2);
+      const blob = new Blob([payload], { type: 'application/json' });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `cybersignal-view-${timestamp}.json`;
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => {
+        URL.revokeObjectURL(link.href);
+      }, 1000);
+      showToast(`Exported ${visibleArticles.length} item${visibleArticles.length === 1 ? '' : 's'}.`, 'success');
+    } catch (error) {
+      console.error('Unable to export current view.', error);
+      showToast('Unable to export current view.', 'error');
+    }
   }
 
   function parseTokens(value) {
@@ -706,6 +1273,29 @@
     queueLayoutMetrics();
   }
 
+  function resetFilters(options = {}) {
+    const { silent = false } = options;
+    if (filters.search) {
+      filters.search.value = '';
+    }
+    if (filters.source) {
+      Array.from(filters.source.options || []).forEach((option) => {
+        option.selected = false;
+      });
+    }
+    (filters.categories || []).forEach((checkbox) => {
+      checkbox.checked = true;
+    });
+    if (filters.cves) filters.cves.checked = false;
+    if (filters.actors) filters.actors.checked = false;
+    if (filters.iocs) filters.iocs.checked = false;
+    if (filters.ttps) filters.ttps.checked = false;
+    applyFilters();
+    if (!silent) {
+      showToast('Filters reset.', 'info');
+    }
+  }
+
   cards.forEach((card) => {
     card.addEventListener('click', () => selectCard(card));
     card.addEventListener('keydown', (event) => {
@@ -732,23 +1322,140 @@
   });
 
   if (resetButton) {
-    resetButton.addEventListener('click', () => {
-      if (filters.search) {
-        filters.search.value = '';
+    resetButton.addEventListener('click', () => resetFilters());
+  }
+
+  if (exportButton) {
+    exportButton.addEventListener('click', () => exportVisibleArticles());
+  }
+
+  if (helpButton) {
+    helpButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (isHelpPanelOpen()) {
+        closeHelpPanel();
+        return;
       }
-      if (filters.source) {
-        Array.from(filters.source.options).forEach((option) => {
-          option.selected = false;
-        });
+      if (isProfileMenuOpen()) {
+        closeProfileMenu({ silent: true });
+        lastFocusedElement = helpButton;
       }
-      (filters.categories || []).forEach((checkbox) => {
-        checkbox.checked = true;
-      });
-      if (filters.cves) filters.cves.checked = false;
-      if (filters.actors) filters.actors.checked = false;
-      if (filters.iocs) filters.iocs.checked = false;
-      if (filters.ttps) filters.ttps.checked = false;
-      applyFilters();
+      openHelpPanel();
+    });
+  }
+
+  helpCloseButtons.forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      closeHelpPanel();
+    });
+  });
+
+  if (helpBackdrop) {
+    helpBackdrop.addEventListener('click', () => closeHelpPanel());
+  }
+
+  helpQuickActionButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const action = button.getAttribute('data-help-filter');
+      applyHelpQuickAction(action);
+    });
+  });
+
+  if (profileButton) {
+    profileButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (isProfileMenuOpen()) {
+        closeProfileMenu();
+      } else {
+        if (isHelpPanelOpen()) {
+          closeHelpPanel({ silent: true });
+        }
+        toggleProfileMenu();
+      }
+    });
+  }
+
+  if (profileMenu) {
+    profileMenu.addEventListener('click', (event) => {
+      const actionTarget = event.target.closest('[data-menu-action]');
+      if (!actionTarget) {
+        return;
+      }
+      event.preventDefault();
+      handleProfileMenuAction(actionTarget.getAttribute('data-menu-action'));
+    });
+  }
+
+  document.addEventListener('click', (event) => {
+    if (!isProfileMenuOpen()) {
+      return;
+    }
+    if (!profileMenu || !profileButton) {
+      return;
+    }
+    const target = event.target;
+    if (profileMenu.contains(target)) {
+      return;
+    }
+    if (profileButton === target || profileButton.contains(target)) {
+      return;
+    }
+    closeProfileMenu({ silent: true });
+    lastFocusedElement = null;
+  });
+
+  if (createViewButton) {
+    createViewButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (isHelpPanelOpen()) {
+        closeHelpPanel({ silent: true });
+        lastFocusedElement = createViewButton;
+      }
+      if (isProfileMenuOpen()) {
+        closeProfileMenu({ silent: true });
+      }
+      openViewModal(createDefaultViewName());
+    });
+  }
+
+  viewModalCloseButtons.forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      closeViewModal();
+    });
+  });
+
+  if (viewModalBackdrop) {
+    viewModalBackdrop.addEventListener('click', () => closeViewModal());
+  }
+
+  if (viewModalForm) {
+    viewModalForm.addEventListener('submit', handleViewModalSubmit);
+  }
+
+  savedViews = loadSavedViews();
+  renderSavedViews();
+
+  if (savedViewsList) {
+    savedViewsList.addEventListener('click', (event) => {
+      const removeTarget = event.target.closest('[data-saved-view-remove]');
+      if (removeTarget) {
+        event.preventDefault();
+        const id = removeTarget.getAttribute('data-saved-view-remove');
+        if (id) {
+          removeSavedView(id);
+        }
+        return;
+      }
+      const applyTarget = event.target.closest('[data-saved-view]');
+      if (applyTarget) {
+        const id = applyTarget.getAttribute('data-saved-view');
+        const view = savedViews.find((entry) => entry.id === id);
+        if (view) {
+          applySavedView(view);
+        }
+      }
     });
   }
 
