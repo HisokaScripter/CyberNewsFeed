@@ -1,44 +1,50 @@
 #!/usr/bin/env python3
-"""Command line entry point for scraping and exporting Cyber News articles."""
+"""Interactive entry point for scraping and exporting Cyber News articles."""
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
+from cybernewsfeed.config import ensure_config, prompt_runtime_path, prompt_runtime_yes_no
 from cybernewsfeed.scraper import CyberSecScraper
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Scrape cybersecurity news feeds and export structured JSON.")
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Optional path for the JSON export. Defaults to cybersec_news.json in the project root.",
-    )
-    parser.add_argument(
-        "--csv",
-        type=Path,
-        default=None,
-        help="Optional CSV export path. When omitted no CSV file is written.",
-    )
-    parser.add_argument(
-        "--print-summary",
-        action="store_true",
-        help="Print a concise summary of the scraped articles once completed.",
-    )
-    return parser.parse_args()
-
-
 def main() -> None:
-    args = parse_args()
-    scraper = CyberSecScraper(auto_generate_html=False)
+    print("CyberNewsFeed scraper")
+    print("======================\n")
+    config = ensure_config()
+
+    default_json = config.get("json_output") or "cybersec_news.json"
+    default_csv = config.get("csv_output") or ""
+    default_summary = bool(config.get("print_summary", False))
+
+    json_path = prompt_runtime_path(
+        "Where should the JSON export be saved?",
+        default=default_json,
+    )
+    if json_path is None:
+        json_path = Path(default_json)
+    csv_path = prompt_runtime_path(
+        "Optional CSV export path (press Enter to skip)",
+        default=default_csv or None,
+        allow_empty=True,
+    )
+    print_summary = prompt_runtime_yes_no(
+        "Print a concise summary of the scraped articles?",
+        default=default_summary,
+    )
+
+    scraper = CyberSecScraper(
+        auto_generate_html=False,
+        data_file=json_path,
+    )
     scraper.scrape_all()
-    scraper.save_to_json(args.output)
-    if args.csv:
-        scraper.save_to_csv(args.csv)
-    if args.print_summary:
+    scraper.save_to_json(json_path)
+    if csv_path:
+        scraper.save_to_csv(csv_path)
+    if print_summary:
         scraper.print_summary()
+
+    print("\nScraping complete.")
 
 
 if __name__ == "__main__":
