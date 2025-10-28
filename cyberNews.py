@@ -1442,15 +1442,15 @@ main {
   flex: 1;
   display: flex;
   flex-direction: row;
-  gap: clamp(1rem, 2vw, 2rem);
+  gap: clamp(0.85rem, 1.75vw, 1.75rem);
   padding: 0 clamp(1.25rem, 3vw, 3rem) clamp(1.5rem, 4vw, 3rem);
   overflow: visible;
   min-height: 0;
 }
 
 .card-column {
-  flex: 0 0 clamp(48%, 52vw, 720px);
-  max-width: clamp(560px, 56vw, 780px);
+  flex: 0 0 clamp(54%, 60vw, 840px);
+  max-width: clamp(600px, 62vw, 900px);
   display: flex;
   flex-direction: column;
   gap: 1rem;
