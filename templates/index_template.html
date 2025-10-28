@@ -693,7 +693,7 @@
     <section class="board-tools">
       <div class="card-column__header">
         <span class="card-column__title">AI summaries</span>
-        <span class="card-column__count" data-count-label>0 items</span>
+        <span class="card-column__count" data-count-label>{{article_count_label}}</span>
       </div>
       <form id="feed-filter-panel" class="filter-panel" autocomplete="off" aria-label="Feed filters">
         <div class="filter-panel__group filter-panel__group--wide">
@@ -704,13 +704,13 @@
         <div class="filter-panel__group">
           <span class="filter-panel__label">Categories</span>
           <div class="filter-panel__checkboxes">
-            <p class="filter-panel__empty">No category filters available.</p>
+            {{category_filter_markup}}
           </div>
         </div>
         <div class="filter-panel__group">
           <label class="filter-panel__label" for="filter-source">Sources</label>
-          <select class="filter-panel__select" id="filter-source" name="source" multiple size="1">
-            <option value="" disabled>No sources available</option>
+          <select class="filter-panel__select" id="filter-source" name="source" multiple size="{{source_size}}">
+            {{source_options}}
           </select>
           <p class="filter-panel__hint">Hold Ctrl/Cmd to select multiple sources.</p>
         </div>
@@ -730,7 +730,7 @@
     </section>
     <section class="card-board" aria-label="Category columns">
       <div class="card-board__columns">
-        <p class="card-empty">No articles available yet.</p>
+        {{cards_markup}}
       </div>
     </section>
   </main>
@@ -782,7 +782,7 @@
       </div>
     </div>
   </div>
-  <script id="article-data" type="application/json">[]</script>
+  <script id="article-data" type="application/json">{{articles_json}}</script>
   <script>
   (function() {
     const dataNode = document.getElementById('article-data');
