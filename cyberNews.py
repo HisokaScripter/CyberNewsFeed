@@ -13,7 +13,12 @@ from html import escape
 from bs4 import BeautifulSoup
 import feedparser
 from datetime import datetime
-import lmstudio as lms
+try:
+    import lmstudio as lms
+    _HAS_LMSTUDIO = True
+except Exception:  # pragma: no cover - optional dependency may be absent in CI
+    lms = None
+    _HAS_LMSTUDIO = False
 import json, re
 from markdownify import markdownify as md
 from pathlib import Path
@@ -707,6 +712,12 @@ class CyberSecScraper:
         return ordered
 
     def _summarize(self, text):
+        if not _HAS_LMSTUDIO:
+            raise RuntimeError(
+                "The 'lmstudio' package is required for AI summarisation. "
+                "Install lmstudio to enable this feature."
+            )
+
         model = lms.llm(self.aiModel)
         return model.respond(self.prompt + text)
     
