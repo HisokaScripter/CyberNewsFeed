@@ -1449,8 +1449,8 @@ main {
 }
 
 .card-column {
-  flex: 0 0 clamp(42%, 45vw, 620px);
-  max-width: clamp(500px, 48vw, 660px);
+  flex: 0 0 clamp(48%, 52vw, 720px);
+  max-width: clamp(560px, 56vw, 780px);
   display: flex;
   flex-direction: column;
   gap: 1rem;
