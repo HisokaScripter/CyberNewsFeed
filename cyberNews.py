@@ -1441,7 +1441,7 @@ header {
 main {
   flex: 1;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: clamp(0.85rem, 1.75vw, 1.75rem);
   padding: 0 clamp(1.25rem, 3vw, 3rem) clamp(1.5rem, 4vw, 3rem);
   overflow: visible;
@@ -1449,15 +1449,17 @@ main {
 }
 
 .card-column {
-  flex: 0 0 clamp(62%, 68vw, 1180px);
-  max-width: clamp(680px, 72vw, 1260px);
+  --card-column-height: auto;
+  --card-groups-height: auto;
+  flex: 1 1 auto;
+  max-width: none;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  border-right: 1px solid var(--surface-border);
-  padding-right: clamp(1rem, 2vw, 1.5rem);
-  height: 100%;
+  padding-right: clamp(0.5rem, 1.2vw, 1rem);
   min-height: 0;
+  height: var(--card-column-height, auto);
+  max-height: var(--card-column-height, none);
   overflow: hidden;
 }
 
@@ -1636,7 +1638,8 @@ main {
   padding-bottom: 0.25rem;
   min-height: 0;
   scroll-snap-type: x proximity;
-  height: 100%;
+  height: var(--card-groups-height, auto);
+  max-height: var(--card-groups-height, none);
 }
 
 .card-category {
@@ -1794,29 +1797,87 @@ main {
 }
 
 .detail-panel {
-  flex: 1;
+  position: fixed;
+  inset: 0;
   display: flex;
-  flex-direction: column;
-  padding-bottom: clamp(1rem, 2.5vw, 2rem);
-  min-width: 0;
-  min-height: 0;
-  position: sticky;
-  top: clamp(1.25rem, 2vw, 2.5rem);
-  height: calc(100vh - clamp(1.25rem, 2vw, 2.5rem) - clamp(1.5rem, 4vw, 3rem));
-  align-self: flex-start;
+  justify-content: flex-end;
+  align-items: stretch;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.28s ease;
+  z-index: 40;
+}
+
+.detail-panel__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  opacity: 0;
+  transition: opacity 0.28s ease;
+  pointer-events: auto;
+  z-index: 0;
+}
+
+.detail-panel.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.detail-panel.is-visible .detail-panel__backdrop {
+  opacity: 1;
 }
 
 .detail-panel__surface {
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.7));
-  border-radius: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  padding: clamp(1.25rem, 2vw, 2rem);
+  position: relative;
+  z-index: 1;
+  margin: clamp(1rem, 2vw, 2.5rem);
+  width: min(32rem, 42vw);
+  max-width: 100%;
+  height: calc(100vh - clamp(2rem, 4vw, 5rem));
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82));
+  border-radius: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  padding: clamp(1.35rem, 2vw, 2rem);
   display: flex;
   flex-direction: column;
   gap: clamp(1.25rem, 1.5vw, 1.75rem);
-  height: 100%;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.05);
+  box-shadow: 0 28px 60px rgba(8, 15, 30, 0.55), inset 0 0 0 1px rgba(148, 163, 184, 0.05);
+  transform: translateX(2rem);
+  opacity: 0;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.detail-panel.is-visible .detail-panel__surface {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.detail-panel__close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.65);
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.detail-panel__close:hover,
+.detail-panel__close:focus-visible {
+  color: var(--accent);
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.12);
+  outline: none;
 }
 
 .detail-panel__placeholder {
@@ -2044,11 +2105,10 @@ main {
   .card-column {
     flex: 1 1 auto;
     max-width: none;
-    border-right: none;
-    border-bottom: 1px solid var(--surface-border);
     padding-right: 0;
     padding-bottom: 1.5rem;
     height: auto;
+    max-height: none;
   }
 
   .card-groups {
@@ -2077,22 +2137,44 @@ main {
   }
 
   .detail-panel {
-    padding-bottom: 1.5rem;
-    min-height: auto;
-    position: static;
-    top: auto;
-    height: auto;
-    align-self: stretch;
+    justify-content: center;
+    align-items: flex-end;
   }
 
   .detail-panel__surface {
-    max-height: none;
-    height: auto;
+    width: min(34rem, 92vw);
+    margin: clamp(0.75rem, 3vw, 1.5rem);
+    height: min(92vh, 760px);
   }
 
   .detail-panel__content {
-    overflow-y: visible;
+    padding-right: clamp(0.1rem, 0.4vw, 0.4rem);
+  }
+}
+
+@media (max-width: 720px) {
+  main {
+    padding: 0 clamp(0.85rem, 5vw, 1.5rem) clamp(1.25rem, 6vw, 2.5rem);
+  }
+
+  .card-column {
     padding-right: 0;
+  }
+
+  .detail-panel__surface {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .detail-panel__content {
+    padding-right: clamp(0.35rem, 2vw, 0.75rem);
+  }
+
+  .detail-panel__close {
+    top: 0.75rem;
+    right: 0.75rem;
   }
 }
 
@@ -2119,6 +2201,7 @@ main {
   }
 
   const cards = Array.from(document.querySelectorAll('.feed-card'));
+  const cardColumn = document.querySelector('.card-column');
   const cardGroups = document.querySelector('.card-groups');
   const detailPanel = document.querySelector('.detail-panel');
   if (!detailPanel) {
@@ -2126,6 +2209,8 @@ main {
   }
   const placeholder = detailPanel.querySelector('.detail-panel__placeholder');
   const content = detailPanel.querySelector('.detail-panel__content');
+  const backdrop = detailPanel.querySelector('.detail-panel__backdrop');
+  const closeControls = Array.from(detailPanel.querySelectorAll('[data-detail-close]'));
 
   const refs = {
     title: detailPanel.querySelector('[data-detail="title"]'),
@@ -2140,6 +2225,39 @@ main {
     actors: detailPanel.querySelector('[data-detail="ThreatActors"]'),
     cves: detailPanel.querySelector('[data-detail="CVEs"]')
   };
+
+  let closeTimer = null;
+
+  function showDetailPanel() {
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    detailPanel.hidden = false;
+    detailPanel.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => {
+      detailPanel.classList.add('is-visible');
+    });
+  }
+
+  function hideDetailPanel() {
+    detailPanel.classList.remove('is-visible');
+    detailPanel.setAttribute('aria-hidden', 'true');
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+    }
+    closeTimer = window.setTimeout(() => {
+      detailPanel.hidden = true;
+      if (placeholder) {
+        placeholder.style.display = '';
+        placeholder.innerHTML = defaultPlaceholderHTML;
+      }
+      if (content) {
+        content.hidden = true;
+      }
+      closeTimer = null;
+    }, 320);
+  }
 
   function clearNode(node) {
     if (!node) {
@@ -2357,6 +2475,13 @@ main {
 
 
   let activeCard = null;
+
+  function clearActiveCard() {
+    if (activeCard) {
+      activeCard.classList.remove('feed-card--active');
+      activeCard = null;
+    }
+  }
   const countLabel = document.querySelector('[data-count-label]') || document.querySelector('.card-column__count');
   const categorySections = Array.from(document.querySelectorAll('[data-category-section]'));
   const filterPanel = document.getElementById('feed-filter-panel');
@@ -2374,6 +2499,78 @@ main {
   };
   const resetButton = document.getElementById('filter-reset');
   const defaultPlaceholderHTML = placeholder ? placeholder.innerHTML : '';
+
+  let layoutFrame = null;
+
+  function updateLayoutMetrics() {
+    if (!cardColumn) {
+      return;
+    }
+    const rect = cardColumn.getBoundingClientRect();
+    const styles = window.getComputedStyle(cardColumn);
+    const paddingBottom = parseFloat(styles.paddingBottom || '0');
+    const gap = parseFloat(styles.gap || '0');
+    const headerHeight = (cardColumn.querySelector('.card-column__header')?.offsetHeight) || 0;
+    const filterHeight = filterPanel?.offsetHeight || 0;
+    const viewportHeight = window.innerHeight;
+    const baseHeight = Math.max(viewportHeight - rect.top - paddingBottom - 16, 360);
+    const groupsHeight = Math.max(baseHeight - headerHeight - filterHeight - gap, 260);
+    cardColumn.style.setProperty('--card-column-height', `${baseHeight}px`);
+    cardColumn.style.setProperty('--card-groups-height', `${groupsHeight}px`);
+  }
+
+  function queueLayoutMetrics() {
+    if (layoutFrame) {
+      cancelAnimationFrame(layoutFrame);
+    }
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = null;
+      updateLayoutMetrics();
+    });
+  }
+
+  queueLayoutMetrics();
+  window.addEventListener('resize', queueLayoutMetrics);
+  window.addEventListener('orientationchange', queueLayoutMetrics);
+  window.addEventListener('load', queueLayoutMetrics);
+
+  if (typeof ResizeObserver !== 'undefined' && cardColumn) {
+    const observer = new ResizeObserver(() => queueLayoutMetrics());
+    observer.observe(cardColumn);
+    if (filterPanel) {
+      observer.observe(filterPanel);
+    }
+    const columnHeader = cardColumn.querySelector('.card-column__header');
+    if (columnHeader) {
+      observer.observe(columnHeader);
+    }
+  }
+
+  function closePanelAndClear() {
+    hideDetailPanel();
+    clearActiveCard();
+  }
+
+  closeControls.forEach((control) => {
+    control.addEventListener('click', (event) => {
+      event.preventDefault();
+      closePanelAndClear();
+    });
+  });
+
+  if (detailPanel) {
+    detailPanel.addEventListener('click', (event) => {
+      if (event.target === detailPanel || event.target === backdrop) {
+        closePanelAndClear();
+      }
+    });
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && detailPanel.classList.contains('is-visible')) {
+      closePanelAndClear();
+    }
+  });
 
   if (cardGroups) {
     cardGroups.addEventListener('wheel', (event) => {
@@ -2428,14 +2625,16 @@ main {
     if (!card || card.hidden) {
       return;
     }
-    if (activeCard) {
-      activeCard.classList.remove('feed-card--active');
+    if (card === activeCard && detailPanel.classList.contains('is-visible')) {
+      return;
     }
+    clearActiveCard();
     activeCard = card;
     activeCard.classList.add('feed-card--active');
     focusCard(activeCard);
     const index = Number(card.getAttribute('data-index'));
     const article = Number.isFinite(index) ? articles[index] : null;
+    showDetailPanel();
     if (placeholder) {
       placeholder.style.display = 'none';
       placeholder.innerHTML = defaultPlaceholderHTML;
@@ -2566,17 +2765,7 @@ main {
     }
 
     if (visibleCount === 0) {
-      if (content) {
-        content.hidden = true;
-      }
-      if (placeholder) {
-        placeholder.innerHTML = '<p>No articles match your filters yet. Adjust your filters or try a different search term.</p>';
-        placeholder.style.display = 'block';
-      }
-      if (activeCard) {
-        activeCard.classList.remove('feed-card--active');
-        activeCard = null;
-      }
+      closePanelAndClear();
       return;
     }
 
@@ -2586,8 +2775,7 @@ main {
     }
 
     if (activeCard && activeCard.hidden) {
-      activeCard.classList.remove('feed-card--active');
-      activeCard = null;
+      clearActiveCard();
     }
 
     if (!activeCard && firstVisibleCard) {
@@ -2595,6 +2783,8 @@ main {
     } else if (activeCard) {
       focusCard(activeCard);
     }
+
+    queueLayoutMetrics();
   }
 
   cards.forEach((card) => {
@@ -2705,51 +2895,53 @@ main {
         {cards_markup}
       </div>
     </section>
-    <aside class=\"detail-panel\" aria-live=\"polite\" aria-label=\"Article detail\">
-      <div class=\"detail-panel__surface\">
-        <div class=\"detail-panel__placeholder\">
-          <p>Select a summary on the left to explore full intelligence, enrichment data, and source material.</p>
-        </div>
-          <div class=\"detail-panel__content\" hidden>
-            <div class=\"detail-panel__header\">
-                <div class=\"detail-panel__meta\">
-                  <h2 class=\"detail-panel__title\" data-detail=\"title\"></h2>
-                  <div class=\"detail-panel__meta-row\">
-                    <span class=\"detail-panel__source\" data-detail=\"source\"></span>
-                    <span class=\"detail-panel__date\" data-detail=\"date\"></span>
-                  </div>
-                  <ul class=\"detail-panel__source-list\" data-detail=\"sources\"></ul>
-                </div>
-              <a class=\"detail-panel__link\" data-detail=\"article\" target=\"_blank\" rel=\"noopener noreferrer\">Open original article</a>
-          </div>
-          <section class=\"detail-panel__section\">
-            <h2>AI summary</h2>
-            <p class=\"detail-panel__text\" data-detail=\"AI-Summary\"></p>
-          </section>
-          <section class=\"detail-panel__section\">
-            <h3>Threat actors</h3>
-            <div class=\"detail-panel__pill-list\" data-detail=\"ThreatActors\"></div>
-          </section>
-          <section class=\"detail-panel__section\">
-            <h3>Techniques &amp; procedures</h3>
-            <div class=\"detail-panel__pill-list\" data-detail=\"TTPs\"></div>
-          </section>
-          <section class=\"detail-panel__section\">
-            <h3>Indicators of compromise</h3>
-            <div class=\"detail-panel__pill-list\" data-detail=\"iocs\"></div>
-          </section>
-          <section class=\"detail-panel__section\">
-            <h3>CVEs</h3>
-            <ul class=\"detail-panel__cve-list\" data-detail=\"CVEs\"></ul>
-          </section>
-          <section class=\"detail-panel__section\">
-            <h3>Analyst notes</h3>
-            <p class=\"detail-panel__text\" data-detail=\"notes\"></p>
-          </section>
-        </div>
-      </div>
-    </aside>
   </main>
+  <aside class=\"detail-panel\" aria-live=\"polite\" aria-label=\"Article detail\" aria-hidden=\"true\" hidden>
+    <div class=\"detail-panel__backdrop\" data-detail-close></div>
+    <div class=\"detail-panel__surface\" role=\"dialog\" aria-modal=\"true\">
+      <button type=\"button\" class=\"detail-panel__close\" data-detail-close aria-label=\"Close panel\">&times;</button>
+      <div class=\"detail-panel__placeholder\">
+        <p>Select a summary to explore full intelligence, enrichment data, and source material.</p>
+      </div>
+      <div class=\"detail-panel__content\" hidden>
+        <div class=\"detail-panel__header\">
+            <div class=\"detail-panel__meta\">
+              <h2 class=\"detail-panel__title\" data-detail=\"title\"></h2>
+              <div class=\"detail-panel__meta-row\">
+                <span class=\"detail-panel__source\" data-detail=\"source\"></span>
+                <span class=\"detail-panel__date\" data-detail=\"date\"></span>
+              </div>
+              <ul class=\"detail-panel__source-list\" data-detail=\"sources\"></ul>
+            </div>
+          <a class=\"detail-panel__link\" data-detail=\"article\" target=\"_blank\" rel=\"noopener noreferrer\">Open original article</a>
+        </div>
+        <section class=\"detail-panel__section\">
+          <h2>AI summary</h2>
+          <p class=\"detail-panel__text\" data-detail=\"AI-Summary\"></p>
+        </section>
+        <section class=\"detail-panel__section\">
+          <h3>Threat actors</h3>
+          <div class=\"detail-panel__pill-list\" data-detail=\"ThreatActors\"></div>
+        </section>
+        <section class=\"detail-panel__section\">
+          <h3>Techniques &amp; procedures</h3>
+          <div class=\"detail-panel__pill-list\" data-detail=\"TTPs\"></div>
+        </section>
+        <section class=\"detail-panel__section\">
+          <h3>Indicators of compromise</h3>
+          <div class=\"detail-panel__pill-list\" data-detail=\"iocs\"></div>
+        </section>
+        <section class=\"detail-panel__section\">
+          <h3>CVEs</h3>
+          <ul class=\"detail-panel__cve-list\" data-detail=\"CVEs\"></ul>
+        </section>
+        <section class=\"detail-panel__section\">
+          <h3>Analyst notes</h3>
+          <p class=\"detail-panel__text\" data-detail=\"notes\"></p>
+        </section>
+      </div>
+    </div>
+  </aside>
   <script id=\"article-data\" type=\"application/json\">{articles_json}</script>
   <script>
 {js}
