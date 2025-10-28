@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cybersecurity News Feed</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1 class="page-title">Cybersecurity Intelligence Briefing</h1>
+    <p class="page-subtitle">Review AI-powered digests of the latest security headlines. Select a card to reveal the enriched intelligence, indicators, and primary source material.</p>
+  </header>
+  <main>
+    <section class="card-column" aria-label="Summarised articles">
+      <div class="card-column__header">
+        <span class="card-column__title">AI summaries</span>
+        <span class="card-column__count" data-count-label>$article_count_label</span>
+      </div>
+      <form class="filter-panel" id="feed-filter-panel" aria-label="Feed filters" autocomplete="off">
+        <div class="filter-panel__group filter-panel__group--search">
+          <label class="filter-panel__label" for="filter-search">Search</label>
+          <input class="filter-panel__input" type="search" id="filter-search" name="search" placeholder="Search summaries, notes, actors…">
+          <p class="filter-panel__hint">Supports tokens such as <code>source:</code>, <code>category:</code>, and <code>tag:</code>.</p>
+        </div>
+        <div class="filter-panel__group">
+          <span class="filter-panel__label">Categories</span>
+          <div class="filter-panel__checkboxes">
+            $category_filter_markup
+          </div>
+        </div>
+        <div class="filter-panel__group">
+          <label class="filter-panel__label" for="filter-source">Sources</label>
+          <select class="filter-panel__select" id="filter-source" name="source" multiple size="$source_size">
+            $source_options
+          </select>
+          <p class="filter-panel__hint">Hold Ctrl/Cmd to select multiple sources.</p>
+        </div>
+        <div class="filter-panel__group filter-panel__group--toggles">
+          <span class="filter-panel__label">Data enrichment</span>
+          <div class="filter-panel__checkboxes filter-panel__checkboxes--toggles">
+            <label class="filter-toggle"><input type="checkbox" id="filter-has-cves"> CVEs only</label>
+            <label class="filter-toggle"><input type="checkbox" id="filter-has-actors"> Threat actors only</label>
+            <label class="filter-toggle"><input type="checkbox" id="filter-has-iocs"> IOCs only</label>
+            <label class="filter-toggle"><input type="checkbox" id="filter-has-ttps"> TTPs only</label>
+          </div>
+        </div>
+        <div class="filter-panel__actions">
+          <button type="button" id="filter-reset">Reset filters</button>
+        </div>
+      </form>
+      <div class="card-groups">
+        $cards_markup
+      </div>
+    </section>
+  </main>
+  <aside class="detail-panel" aria-live="polite" aria-label="Article detail" aria-hidden="true" hidden>
+    <div class="detail-panel__backdrop" data-detail-close></div>
+    <div class="detail-panel__surface" role="dialog" aria-modal="true">
+      <button type="button" class="detail-panel__close" data-detail-close aria-label="Close panel">&times;</button>
+      <div class="detail-panel__placeholder">
+        <p>Select a summary to explore full intelligence, enrichment data, and source material.</p>
+      </div>
+      <div class="detail-panel__content" hidden>
+        <div class="detail-panel__header">
+            <div class="detail-panel__meta">
+              <h2 class="detail-panel__title" data-detail="title"></h2>
+              <div class="detail-panel__meta-row">
+                <span class="detail-panel__source" data-detail="source"></span>
+                <span class="detail-panel__date" data-detail="date"></span>
+              </div>
+              <ul class="detail-panel__source-list" data-detail="sources"></ul>
+            </div>
+          <a class="detail-panel__link" data-detail="article" target="_blank" rel="noopener noreferrer">Open original article</a>
+        </div>
+        <section class="detail-panel__section">
+          <h2>AI summary</h2>
+          <p class="detail-panel__text" data-detail="AI-Summary"></p>
+        </section>
+        <section class="detail-panel__section">
+          <h3>Threat actors</h3>
+          <div class="detail-panel__pill-list" data-detail="ThreatActors"></div>
+        </section>
+        <section class="detail-panel__section">
+          <h3>Techniques &amp; procedures</h3>
+          <div class="detail-panel__pill-list" data-detail="TTPs"></div>
+        </section>
+        <section class="detail-panel__section">
+          <h3>Indicators of compromise</h3>
+          <div class="detail-panel__pill-list" data-detail="iocs"></div>
+        </section>
+        <section class="detail-panel__section">
+          <h3>CVEs</h3>
+          <ul class="detail-panel__cve-list" data-detail="CVEs"></ul>
+        </section>
+        <section class="detail-panel__section">
+          <h3>Analyst notes</h3>
+          <p class="detail-panel__text" data-detail="notes"></p>
+        </section>
+      </div>
+    </div>
+  </aside>
+  <script id="article-data" type="application/json">$articles_json</script>
+  <script src="app.js"></script>
+</body>
+</html>
