@@ -1449,8 +1449,8 @@ main {
 }
 
 .card-column {
-  flex: 0 0 clamp(54%, 60vw, 840px);
-  max-width: clamp(600px, 62vw, 900px);
+  flex: 0 0 clamp(62%, 68vw, 1180px);
+  max-width: clamp(680px, 72vw, 1260px);
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -1458,6 +1458,7 @@ main {
   padding-right: clamp(1rem, 2vw, 1.5rem);
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .card-column__header {
@@ -1626,24 +1627,44 @@ main {
 
 .card-groups {
   display: flex;
-  flex-direction: column;
-  gap: clamp(1rem, 1.8vw, 1.5rem);
+  flex-direction: row;
+  align-items: stretch;
+  gap: clamp(1rem, 1.6vw, 1.35rem);
   flex: 1;
-  overflow-y: auto;
-  padding-right: clamp(0.15rem, 1vw, 0.35rem);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.25rem;
   min-height: 0;
+  scroll-snap-type: x proximity;
+  height: 100%;
 }
 
 .card-category {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  flex: 0 0 clamp(18rem, 22vw, 23.5rem);
+  max-width: clamp(19rem, 24vw, 25rem);
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.45));
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  padding: clamp(0.9rem, 1.4vw, 1.15rem);
+  min-height: 0;
+  scroll-snap-align: start;
+  height: 100%;
 }
 
 .card-category__header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  position: sticky;
+  top: 0;
+  padding-bottom: 0.35rem;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.75));
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  z-index: 1;
+  flex-shrink: 0;
 }
 
 .card-category__title {
@@ -1674,6 +1695,10 @@ main {
   display: flex;
   flex-direction: column;
   gap: clamp(0.75rem, 1.1vw, 1.15rem);
+  overflow-y: auto;
+  padding-right: clamp(0.15rem, 0.6vw, 0.5rem);
+  min-height: 0;
+  flex: 1;
 }
 
 .feed-card {
@@ -2026,6 +2051,31 @@ main {
     height: auto;
   }
 
+  .card-groups {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: visible;
+    height: auto;
+    gap: clamp(1rem, 2vw, 1.5rem);
+  }
+
+  .card-category {
+    flex: 1 1 auto;
+    max-width: none;
+    height: auto;
+  }
+
+  .card-category__header {
+    position: static;
+    background: none;
+    border-bottom: none;
+  }
+
+  .card-list {
+    overflow-y: visible;
+    padding-right: 0;
+  }
+
   .detail-panel {
     padding-bottom: 1.5rem;
     min-height: auto;
@@ -2069,6 +2119,7 @@ main {
   }
 
   const cards = Array.from(document.querySelectorAll('.feed-card'));
+  const cardGroups = document.querySelector('.card-groups');
   const detailPanel = document.querySelector('.detail-panel');
   if (!detailPanel) {
     return;
@@ -2324,6 +2375,55 @@ main {
   const resetButton = document.getElementById('filter-reset');
   const defaultPlaceholderHTML = placeholder ? placeholder.innerHTML : '';
 
+  if (cardGroups) {
+    cardGroups.addEventListener('wheel', (event) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+        return;
+      }
+      cardGroups.scrollBy({ left: event.deltaY, behavior: 'auto' });
+      event.preventDefault();
+    }, { passive: false });
+  }
+
+  function focusCard(card, options = {}) {
+    if (!card) {
+      return;
+    }
+    const behavior = options.behavior || 'smooth';
+    const columnList = card.closest('.card-list');
+    if (columnList) {
+      const targetTop = card.offsetTop - (columnList.clientHeight / 2) + (card.clientHeight / 2);
+      const clampedTop = Number.isFinite(targetTop) ? Math.max(0, targetTop) : 0;
+      if (typeof columnList.scrollTo === 'function') {
+        columnList.scrollTo({ top: clampedTop, behavior });
+      } else {
+        columnList.scrollTop = clampedTop;
+      }
+    }
+    if (cardGroups) {
+      const column = card.closest('.card-category');
+      if (column) {
+        const columnLeft = column.offsetLeft;
+        const columnWidth = column.offsetWidth;
+        const viewportWidth = cardGroups.clientWidth || 1;
+        const maxScroll = Math.max(0, cardGroups.scrollWidth - viewportWidth);
+        let desiredLeft = columnLeft - (viewportWidth - columnWidth) / 2;
+        if (!Number.isFinite(desiredLeft)) {
+          desiredLeft = columnLeft;
+        }
+        desiredLeft = Math.min(Math.max(0, desiredLeft), maxScroll);
+        if (typeof cardGroups.scrollTo === 'function') {
+          cardGroups.scrollTo({ left: desiredLeft, behavior });
+        } else {
+          cardGroups.scrollLeft = desiredLeft;
+        }
+      }
+    }
+  }
+
   function selectCard(card) {
     if (!card || card.hidden) {
       return;
@@ -2333,6 +2433,7 @@ main {
     }
     activeCard = card;
     activeCard.classList.add('feed-card--active');
+    focusCard(activeCard);
     const index = Number(card.getAttribute('data-index'));
     const article = Number.isFinite(index) ? articles[index] : null;
     if (placeholder) {
@@ -2341,6 +2442,11 @@ main {
     }
     if (content) {
       content.hidden = false;
+      if (typeof content.scrollTo === 'function') {
+        content.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        content.scrollTop = 0;
+      }
     }
     updateDetail(article);
   }
@@ -2486,6 +2592,8 @@ main {
 
     if (!activeCard && firstVisibleCard) {
       selectCard(firstVisibleCard);
+    } else if (activeCard) {
+      focusCard(activeCard);
     }
   }
 
