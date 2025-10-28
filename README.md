@@ -1,6 +1,46 @@
 # CyberNewsFeed
 
-CyberNewsFeed is a Python toolkit for collecting, enriching, and presenting the latest cybersecurity news. It scrapes a large catalog of industry RSS feeds, optionally augments the stories with AI-generated summaries and indicators, and renders a searchable single-page dashboard that can be hosted anywhere.
+CyberNewsFeed is a Python-powered news harvester that keeps you up to date on cybersecurity stories. Think of it as a scriptable "threat intel newspaper": it reads dozens of curated RSS feeds, keeps only the newest articles, optionally summarizes them with a local AI model, and turns the results into a shareable HTML dashboard.
+
+## Overview for first-time readers
+
+1. **Collect articles** – `fetch_articles.py` downloads the latest headlines and metadata from security blogs, vendors, CERT advisories, and (optionally) dark web sources.
+2. **Enrich the content** – when LM Studio is available, the scraper summarizes each story and extracts useful entities (CVEs, IOCs, threat actors). If the AI tooling is missing, the scripts fall back to raw metadata without failing.
+3. **Publish the feed** – the gathered dataset is saved to JSON/CSV and can be rendered into a static, searchable `index.html` dashboard with `build_html.py`.
+
+Because everything is static, you can host the generated dashboard on any static site provider or open it locally without additional services.
+
+## Quick example
+
+Below is a minimal end-to-end run that you can reproduce immediately after cloning the repo. It collects articles, saves them to `latest.json`, and rebuilds the dashboard:
+
+```bash
+python fetch_articles.py --output latest.json --print-summary
+python build_html.py latest.json --output index.html
+```
+
+After the commands finish, you will have:
+
+- `latest.json` – machine-readable article data.
+- `index.html` – an interactive dashboard you can open in a browser.
+- `ParsedArticles.txt` – a cache of article fingerprints that prevents duplicates on subsequent runs (delete it to rescan everything).
+
+A shortened snippet from the JSON file looks like this:
+
+```json
+{
+  "title": "CISA warns of new critical Fortinet vulnerability",
+  "link": "https://example.com/cisa-fortinet-alert",
+  "published": "2024-04-16T14:32:00Z",
+  "source": "CISA Alerts",
+  "summary": "CISA urges Fortinet customers to patch CVE-2024-12345 because ...",
+  "indicators": ["CVE-2024-12345"],
+  "threat_actors": ["Unknown"],
+  "tags": ["Fortinet", "Patch"]
+}
+```
+
+> **Tip:** if you do not see the optional `summary`, `indicators`, or `threat_actors` keys, install LM Studio and re-run the scraper to enable AI enrichment.
 
 ## Features
 
@@ -37,39 +77,6 @@ fetch_articles.py     CLI entry point for scraping and exporting feeds
 index.html            Example output produced by `build_html.py`
 ```
 
-## Usage
-
-### 1. Scrape the feeds
-
-Run the scraper to collect the latest articles. By default it writes `cybersec_news.json` in the project root and updates `index.html` every few articles when `auto_generate_html` is enabled.
-
-```bash
-python fetch_articles.py --print-summary
-```
-
-Optional flags:
-
-- `--output PATH` – custom JSON destination
-- `--csv PATH` – also export a CSV copy
-- `--print-summary` – log a feed summary to stdout
-
-The scraper stores fingerprints of processed articles in `ParsedArticles.txt` to avoid duplicates between runs. If you want to rebuild from scratch, delete that file first.
-
-### 2. Render (or re-render) the dashboard
-
-You can rebuild the static dashboard at any time from a JSON export:
-
-```bash
-python build_html.py cybersec_news.json --output index.html
-```
-
-Additional options:
-
-- `--template PATH` – provide a custom HTML template
-- `--assets DIR` – point to a directory containing `styles.css` and `app.js`
-
-The generated `index.html` is fully static, so you can open it locally in a browser or host it on any static site provider.
-
 ## Optional configuration
 
 - **TOR routing:** set the `TOR_PROXY` environment variable (defaults to `socks5h://127.0.0.1:9050`) if you want the dark web feeds to go through a different proxy.
@@ -85,4 +92,3 @@ The generated `index.html` is fully static, so you can open it locally in a brow
 ## License
 
 This project currently does not declare a license. Please verify usage terms before redistribution.
-
