@@ -12,18 +12,18 @@ Because everything is static, you can host the generated dashboard on any static
 
 ## Quick example
 
-Below is a minimal end-to-end run that you can reproduce immediately after cloning the repo. It collects articles, saves them to `latest.json`, and rebuilds the dashboard:
+Below is a minimal end-to-end run that you can reproduce immediately after cloning the repo. It collects articles, saves them to the default `cybersec_news.json`, and rebuilds the dashboard:
 
 ```bash
-python fetch_articles.py --output latest.json --print-summary
-python build_html.py latest.json --output index.html
+python fetch_articles.py --print-summary
+python build_html.py cybersec_news.json --output index.html
 ```
 
 After the commands finish, you will have:
 
-- `latest.json` – machine-readable article data.
+- `cybersec_news.json` – machine-readable article data saved (and reused) by the scraper.
 - `index.html` – an interactive dashboard you can open in a browser.
-- `ParsedArticles.txt` – a cache of article fingerprints that prevents duplicates on subsequent runs (delete it to rescan everything).
+- `cybersec_news.parsed.txt` (or the legacy `ParsedArticles.txt`) – a cache of article fingerprints that prevents duplicates on subsequent runs (delete it to rescan everything).
 
 A shortened snippet from the JSON file looks like this:
 
@@ -41,6 +41,23 @@ A shortened snippet from the JSON file looks like this:
 ```
 
 > **Tip:** if you do not see the optional `summary`, `indicators`, or `threat_actors` keys, install LM Studio and re-run the scraper to enable AI enrichment.
+
+## Resuming and incremental updates
+
+Running `python fetch_articles.py` multiple times will continue building on the existing dataset:
+
+- The scraper loads `cybersec_news.json` (or the file provided via `--output`) at startup and keeps previously saved articles.
+- Newly discovered items are appended, while duplicates are skipped using the `.parsed.txt` cache file.
+- You can pause and resume long scraping sessions—the JSON file and cache are persisted after every successful article.
+
+If you want to maintain separate feeds, supply a different output path:
+
+```bash
+python fetch_articles.py --output data/darkweb.json
+python build_html.py data/darkweb.json --output darkweb.html
+```
+
+Each custom JSON file gets its own companion cache (for example `data/darkweb.parsed.txt`), so rerunning the scraper with the same `--output` path resumes exactly where it left off.
 
 ## Features
 
