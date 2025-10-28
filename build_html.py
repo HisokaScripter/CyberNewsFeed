@@ -1,50 +1,61 @@
 #!/usr/bin/env python3
-"""Generate the HTML dashboard from a JSON article feed."""
+"""Interactive generator for the CyberNewsFeed HTML dashboard."""
 from __future__ import annotations
 
-import argparse
 import json
 from pathlib import Path
 
+from cybernewsfeed.config import ensure_config, prompt_runtime_path
 from cybernewsfeed.html_builder import build_html
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Render the Cyber News Feed HTML from an article JSON file.")
-    parser.add_argument(
-        "json_path",
-        type=Path,
-        help="Path to the JSON file produced by fetch_articles.py.",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Destination for the generated HTML file. Defaults to index.html in the project root.",
-    )
-    parser.add_argument(
-        "--template",
-        type=Path,
-        default=None,
-        help="Optional custom HTML template path to override the default.",
-    )
-    parser.add_argument(
-        "--assets",
-        type=Path,
-        default=None,
-        help="Optional directory containing styles.css and app.js assets.",
-    )
-    return parser.parse_args()
-
-
 def main() -> None:
-    args = parse_args()
-    if not args.json_path.exists():
-        raise SystemExit(f"JSON file not found: {args.json_path}")
-    with args.json_path.open("r", encoding="utf-8") as handle:
+    print("CyberNewsFeed HTML builder")
+    print("==========================\n")
+    config = ensure_config()
+
+    default_json = config.get("json_output") or "cybersec_news.json"
+    default_html = config.get("html_output") or "index.html"
+    default_template = config.get("template_path") or ""
+    default_assets = config.get("assets_dir") or ""
+
+    json_path = prompt_runtime_path(
+        "Which JSON feed should be rendered?",
+        default=default_json,
+    )
+    if json_path is None or not json_path.exists():
+        if json_path is None:
+            json_path = Path(default_json)
+        if not json_path.exists():
+            raise SystemExit(f"JSON file not found: {json_path}")
+
+    output_path = prompt_runtime_path(
+        "Where should the HTML dashboard be written?",
+        default=default_html,
+    )
+    if output_path is None:
+        output_path = Path(default_html)
+
+    template_path = prompt_runtime_path(
+        "Template override (press Enter to use the default template)",
+        default=default_template or None,
+        allow_empty=True,
+    )
+    assets_dir = prompt_runtime_path(
+        "Assets directory override (press Enter to use bundled assets)",
+        default=default_assets or None,
+        allow_empty=True,
+    )
+
+    with json_path.open("r", encoding="utf-8") as handle:
         articles = json.load(handle)
-    output = args.output or Path("index.html")
-    build_html(articles, output, template_path=args.template, assets_dir=args.assets)
+
+    build_html(
+        articles,
+        output_path,
+        template_path=template_path,
+        assets_dir=assets_dir,
+    )
 
 
 if __name__ == "__main__":
