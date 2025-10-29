@@ -22,6 +22,7 @@
   const drawer = document.querySelector('[data-detail-panel]');
   const drawerSurface = drawer ? drawer.querySelector('.drawer__surface') : null;
   const closeControls = drawer ? Array.from(drawer.querySelectorAll('[data-drawer-close]')) : [];
+  const filterInput = document.querySelector('[data-filter-input]');
 
   if (!board || !drawer || !drawerSurface) {
     return;
@@ -51,6 +52,8 @@
 
   let activeArticle = null;
   let lastFocusedElement = null;
+  let filterValue = '';
+  const defaultEmptyMessage = emptyState ? emptyState.textContent : '';
 
   function escapeHTML(value) {
     return String(value)
@@ -117,6 +120,44 @@
     } else {
       section.classList.remove('is-visible');
     }
+  }
+
+  function matchesFilter(article, filterTerm) {
+    if (!filterTerm) {
+      return true;
+    }
+
+    const parts = [
+      article.title,
+      article.headline,
+      article.summary,
+      article['AI-Summary'],
+      article.notes,
+      article.description,
+      article.primary_category,
+    ];
+
+    const aggregateLists = [
+      normaliseList(article.categories),
+      normaliseList(article.sources),
+      normaliseList(article.ThreatActors || article.threat_actors),
+      normaliseList(article.TTPs || article.ttps),
+      normaliseList(article.CVEs || article.cves),
+      normaliseList(article.iocs || article.IOCs),
+    ];
+
+    aggregateLists.forEach((values) => {
+      if (values.length) {
+        parts.push(values.join(' '));
+      }
+    });
+
+    return parts.some((value) => {
+      if (!value) {
+        return false;
+      }
+      return String(value).toLowerCase().includes(filterTerm);
+    });
   }
 
   function showDrawer(article) {
@@ -257,17 +298,24 @@
     columns.get(primaryCategory).push({ article, index });
   });
 
-  if (columns.size === 0) {
-    if (emptyState) {
-      emptyState.hidden = false;
-    }
-  } else {
-    if (emptyState) {
-      emptyState.hidden = true;
-    }
+  function renderBoard() {
+    const term = filterValue.trim().toLowerCase();
+    let visibleCount = 0;
+    let hasMatches = false;
+
     board.textContent = '';
 
     columnOrder.forEach((categoryName) => {
+      const items = columns.get(categoryName) || [];
+      const matchingItems = items.filter(({ article }) => matchesFilter(article, term));
+
+      if (matchingItems.length === 0) {
+        return;
+      }
+
+      hasMatches = true;
+      visibleCount += matchingItems.length;
+
       const column = document.createElement('section');
       column.className = 'column';
 
@@ -281,8 +329,7 @@
 
       const count = document.createElement('span');
       count.className = 'column__count';
-      const items = columns.get(categoryName) || [];
-      count.textContent = `${items.length} item${items.length === 1 ? '' : 's'}`;
+      count.textContent = `${matchingItems.length} item${matchingItems.length === 1 ? '' : 's'}`;
       header.appendChild(count);
 
       column.appendChild(header);
@@ -290,7 +337,7 @@
       const list = document.createElement('div');
       list.className = 'column__cards';
 
-      items.forEach(({ article, index }) => {
+      matchingItems.forEach(({ article, index }) => {
         const card = document.createElement('article');
         card.className = 'card';
         card.setAttribute('tabindex', '0');
@@ -358,7 +405,39 @@
       column.appendChild(list);
       board.appendChild(column);
     });
+
+    if (!hasMatches) {
+      if (emptyState) {
+        emptyState.hidden = false;
+        emptyState.textContent = term
+          ? 'No articles match your filter.'
+          : defaultEmptyMessage;
+        board.appendChild(emptyState);
+      }
+    } else if (emptyState) {
+      emptyState.hidden = true;
+      emptyState.textContent = defaultEmptyMessage;
+      if (emptyState.isConnected) {
+        emptyState.remove();
+      }
+    }
+
+    if (totalCountLabel) {
+      if (term) {
+        totalCountLabel.textContent = `Showing ${visibleCount} of ${articles.length} items`;
+      } else {
+        totalCountLabel.textContent = `${articles.length} item${articles.length === 1 ? '' : 's'}`;
+      }
+    }
+
+    if (filterInput) {
+      filterInput.setAttribute('aria-label', `Filter articles, ${visibleCount} shown`);
+    }
+
+    return { visibleCount };
   }
+
+  renderBoard();
 
   if (typeof Intl !== 'undefined' && lastSyncLabel) {
     try {
@@ -371,10 +450,6 @@
     } catch (error) {
       lastSyncLabel.textContent = 'Updated just now';
     }
-  }
-
-  if (totalCountLabel) {
-    totalCountLabel.textContent = `${articles.length} item${articles.length === 1 ? '' : 's'}`;
   }
 
   closeControls.forEach((control) => {
@@ -398,4 +473,15 @@
       hideDrawer();
     }
   });
+
+  if (filterInput) {
+    filterInput.addEventListener('input', (event) => {
+      filterValue = event.target.value || '';
+      const { visibleCount } = renderBoard();
+      const term = filterValue.trim().toLowerCase();
+      if (activeArticle && !matchesFilter(activeArticle, term)) {
+        hideDrawer();
+      }
+    });
+  }
 })();
