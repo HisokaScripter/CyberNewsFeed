@@ -22,7 +22,17 @@
   const drawer = document.querySelector('[data-detail-panel]');
   const drawerSurface = drawer ? drawer.querySelector('.drawer__surface') : null;
   const closeControls = drawer ? Array.from(drawer.querySelectorAll('[data-drawer-close]')) : [];
-  const filterInput = document.querySelector('[data-filter-input]');
+  const filterToggle = document.querySelector('[data-filter-toggle]');
+  const filterToggleLabel = filterToggle ? filterToggle.querySelector('[data-filter-toggle-label]') : null;
+  const filterPanel = document.querySelector('[data-filter-panel]');
+  const filterSurface = filterPanel ? filterPanel.querySelector('.filter-panel__surface') : null;
+  const filterCloseControls = filterPanel ? Array.from(filterPanel.querySelectorAll('[data-filter-close]')) : [];
+  const filterTextInput = filterPanel ? filterPanel.querySelector('[data-filter-text]') : null;
+  const categoryListNode = filterPanel ? filterPanel.querySelector('[data-filter-category-list]') : null;
+  const sourceListNode = filterPanel ? filterPanel.querySelector('[data-filter-source-list]') : null;
+  const enrichmentFlags = filterPanel ? Array.from(filterPanel.querySelectorAll('[data-filter-flag]')) : [];
+  const clearFiltersButton = filterPanel ? filterPanel.querySelector('[data-filter-clear]') : null;
+  const applyFiltersButton = filterPanel ? filterPanel.querySelector('[data-filter-apply]') : null;
 
   if (!board || !drawer || !drawerSurface) {
     return;
@@ -52,7 +62,16 @@
 
   let activeArticle = null;
   let lastFocusedElement = null;
-  let filterValue = '';
+  let lastFilterTrigger = null;
+  const filterState = {
+    text: '',
+    categories: new Set(),
+    sources: new Set(),
+    cves: false,
+    actors: false,
+    ttps: false,
+    iocs: false,
+  };
   const defaultEmptyMessage = emptyState ? emptyState.textContent : '';
 
   function escapeHTML(value) {
@@ -78,6 +97,20 @@
         .filter(Boolean);
     }
     return [String(value).trim()].filter(Boolean);
+  }
+
+  function sortFilterValues(values) {
+    return values
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (a === 'General') {
+          return -1;
+        }
+        if (b === 'General') {
+          return 1;
+        }
+        return a.localeCompare(b, undefined, { sensitivity: 'base' });
+      });
   }
 
   function summarise(text, maxLength) {
@@ -122,42 +155,169 @@
     }
   }
 
-  function matchesFilter(article, filterTerm) {
-    if (!filterTerm) {
-      return true;
+  function hasActiveFilters() {
+    return (
+      Boolean(filterState.text.trim()) ||
+      filterState.categories.size > 0 ||
+      filterState.sources.size > 0 ||
+      filterState.cves ||
+      filterState.actors ||
+      filterState.ttps ||
+      filterState.iocs
+    );
+  }
+
+  function getActiveFilterCount() {
+    let count = 0;
+    if (filterState.text.trim()) {
+      count += 1;
     }
+    if (filterState.categories.size > 0) {
+      count += 1;
+    }
+    if (filterState.sources.size > 0) {
+      count += 1;
+    }
+    if (filterState.cves) {
+      count += 1;
+    }
+    if (filterState.actors) {
+      count += 1;
+    }
+    if (filterState.ttps) {
+      count += 1;
+    }
+    if (filterState.iocs) {
+      count += 1;
+    }
+    return count;
+  }
 
-    const parts = [
-      article.title,
-      article.headline,
-      article.summary,
-      article['AI-Summary'],
-      article.notes,
-      article.description,
-      article.primary_category,
-    ];
+  function matchesFilter(article) {
+    const term = filterState.text.trim().toLowerCase();
 
-    const aggregateLists = [
-      normaliseList(article.categories),
-      normaliseList(article.sources),
-      normaliseList(article.ThreatActors || article.threat_actors),
-      normaliseList(article.TTPs || article.ttps),
-      normaliseList(article.CVEs || article.cves),
-      normaliseList(article.iocs || article.IOCs),
-    ];
+    if (term) {
+      const parts = [
+        article.title,
+        article.headline,
+        article.summary,
+        article['AI-Summary'],
+        article.notes,
+        article.description,
+        article.primary_category,
+      ];
 
-    aggregateLists.forEach((values) => {
-      if (values.length) {
-        parts.push(values.join(' '));
-      }
-    });
+      const aggregateLists = [
+        normaliseList(article.categories),
+        normaliseList(article.sources),
+        normaliseList(article.ThreatActors || article.threat_actors),
+        normaliseList(article.TTPs || article.ttps),
+        normaliseList(article.CVEs || article.cves),
+        normaliseList(article.iocs || article.IOCs),
+      ];
 
-    return parts.some((value) => {
-      if (!value) {
+      aggregateLists.forEach((values) => {
+        if (values.length) {
+          parts.push(values.join(' '));
+        }
+      });
+
+      const hasTextMatch = parts.some((value) => {
+        if (!value) {
+          return false;
+        }
+        return String(value).toLowerCase().includes(term);
+      });
+
+      if (!hasTextMatch) {
         return false;
       }
-      return String(value).toLowerCase().includes(filterTerm);
-    });
+    }
+
+    if (filterState.categories.size > 0) {
+      const categories = new Set(normaliseList(article.categories));
+      const primaryCategory = article.primary_category;
+      if (primaryCategory) {
+        categories.add(String(primaryCategory).trim());
+      }
+      if (categories.size === 0) {
+        categories.add('General');
+      }
+      let matchesCategory = false;
+      filterState.categories.forEach((value) => {
+        if (categories.has(value)) {
+          matchesCategory = true;
+        }
+      });
+      if (!matchesCategory) {
+        return false;
+      }
+    }
+
+    if (filterState.sources.size > 0) {
+      const sources = new Set(normaliseList(article.sources));
+      const fallbackSource = article.source || article.provider || article.feed_source;
+      if (fallbackSource) {
+        sources.add(String(fallbackSource).trim());
+      }
+      let matchesSource = false;
+      filterState.sources.forEach((value) => {
+        if (sources.has(value)) {
+          matchesSource = true;
+        }
+      });
+      if (!matchesSource) {
+        return false;
+      }
+    }
+
+    if (filterState.cves) {
+      if (normaliseList(article.CVEs || article.cves).length === 0) {
+        return false;
+      }
+    }
+
+    if (filterState.actors) {
+      if (normaliseList(article.ThreatActors || article.threat_actors).length === 0) {
+        return false;
+      }
+    }
+
+    if (filterState.ttps) {
+      if (normaliseList(article.TTPs || article.ttps).length === 0) {
+        return false;
+      }
+    }
+
+    if (filterState.iocs) {
+      if (normaliseList(article.iocs || article.IOCs).length === 0) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function updateFilterToggleLabel(visibleCount) {
+    if (!filterToggle) {
+      return;
+    }
+    const activeCount = getActiveFilterCount();
+    if (filterToggleLabel) {
+      if (activeCount > 0) {
+        filterToggleLabel.textContent = `Filters (${activeCount})`;
+      } else {
+        filterToggleLabel.textContent = 'Advanced filters';
+      }
+    }
+    if (activeCount > 0) {
+      filterToggle.setAttribute(
+        'aria-label',
+        `Adjust filters. ${visibleCount} visible with ${activeCount} active filter${activeCount === 1 ? '' : 's'}.`,
+      );
+    } else {
+      filterToggle.setAttribute('aria-label', 'Open advanced filters');
+    }
   }
 
   function showDrawer(article) {
@@ -287,27 +447,94 @@
 
   const columnOrder = [];
   const columns = new Map();
+  const availableCategories = new Set();
+  const availableSources = new Set();
 
   articles.forEach((article, index) => {
     const categories = normaliseList(article.categories);
     const primaryCategory = article.primary_category || categories[0] || 'General';
-    if (!columns.has(primaryCategory)) {
-      columns.set(primaryCategory, []);
-      columnOrder.push(primaryCategory);
+    const resolvedCategory = primaryCategory || 'General';
+    if (!columns.has(resolvedCategory)) {
+      columns.set(resolvedCategory, []);
+      columnOrder.push(resolvedCategory);
     }
-    columns.get(primaryCategory).push({ article, index });
+    columns.get(resolvedCategory).push({ article, index });
+
+    if (primaryCategory) {
+      availableCategories.add(String(primaryCategory).trim());
+    }
+    if (categories.length === 0 && !article.primary_category) {
+      availableCategories.add('General');
+    }
+    categories.forEach((category) => {
+      if (category) {
+        availableCategories.add(category);
+      }
+    });
+
+    const sourceList = normaliseList(article.sources);
+    const fallbackSource = article.source || article.provider || article.feed_source;
+    if (fallbackSource) {
+      sourceList.push(String(fallbackSource).trim());
+    }
+    sourceList.forEach((source) => {
+      if (source) {
+        availableSources.add(source);
+      }
+    });
   });
 
+  const sortedCategoryOptions = sortFilterValues(Array.from(availableCategories));
+  const sortedSourceOptions = sortFilterValues(Array.from(availableSources));
+
+  function renderOptionList(container, values, stateSet) {
+    if (!container) {
+      return;
+    }
+    container.textContent = '';
+    values.forEach((value) => {
+      const option = document.createElement('label');
+      option.className = 'filter-panel__option';
+      option.setAttribute('data-filter-value', value);
+
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = value;
+      input.checked = stateSet.has(value);
+      option.classList.toggle('is-active', input.checked);
+
+      input.addEventListener('change', () => {
+        if (input.checked) {
+          stateSet.add(value);
+        } else {
+          stateSet.delete(value);
+        }
+        option.classList.toggle('is-active', input.checked);
+        handleFiltersUpdated();
+      });
+
+      const caption = document.createElement('span');
+      caption.textContent = value;
+
+      option.appendChild(input);
+      option.appendChild(caption);
+      container.appendChild(option);
+    });
+  }
+
+  renderOptionList(categoryListNode, sortedCategoryOptions, filterState.categories);
+  renderOptionList(sourceListNode, sortedSourceOptions, filterState.sources);
+
   function renderBoard() {
-    const term = filterValue.trim().toLowerCase();
     let visibleCount = 0;
     let hasMatches = false;
+    const filtersActive = hasActiveFilters();
 
     board.textContent = '';
 
     columnOrder.forEach((categoryName) => {
       const items = columns.get(categoryName) || [];
-      const matchingItems = items.filter(({ article }) => matchesFilter(article, term));
+      const matchingItems = items.filter(({ article }) => matchesFilter(article));
 
       if (matchingItems.length === 0) {
         return;
@@ -409,8 +636,8 @@
     if (!hasMatches) {
       if (emptyState) {
         emptyState.hidden = false;
-        emptyState.textContent = term
-          ? 'No articles match your filter.'
+        emptyState.textContent = filtersActive
+          ? 'No articles match your filters.'
           : defaultEmptyMessage;
         board.appendChild(emptyState);
       }
@@ -423,18 +650,81 @@
     }
 
     if (totalCountLabel) {
-      if (term) {
+      if (filtersActive) {
         totalCountLabel.textContent = `Showing ${visibleCount} of ${articles.length} items`;
       } else {
         totalCountLabel.textContent = `${articles.length} item${articles.length === 1 ? '' : 's'}`;
       }
     }
 
-    if (filterInput) {
-      filterInput.setAttribute('aria-label', `Filter articles, ${visibleCount} shown`);
+    if (filterTextInput) {
+      filterTextInput.setAttribute('aria-label', `Keyword filter, ${visibleCount} articles match`);
     }
 
+    updateFilterToggleLabel(visibleCount);
+
     return { visibleCount };
+  }
+
+  function handleFiltersUpdated() {
+    const { visibleCount } = renderBoard();
+    if (activeArticle && !matchesFilter(activeArticle)) {
+      hideDrawer();
+    }
+    return visibleCount;
+  }
+
+  function openFilterPanel() {
+    if (!filterPanel || !filterSurface) {
+      return;
+    }
+    if (filterPanel.classList.contains('is-visible')) {
+      return;
+    }
+    lastFilterTrigger = document.activeElement;
+    filterPanel.hidden = false;
+    filterPanel.setAttribute('aria-hidden', 'false');
+    filterPanel.classList.add('is-visible');
+    document.body.classList.add('filter-open');
+    if (filterToggle) {
+      filterToggle.setAttribute('aria-expanded', 'true');
+    }
+    const focusTarget = filterTextInput || filterSurface;
+    requestAnimationFrame(() => {
+      if (focusTarget && typeof focusTarget.focus === 'function') {
+        try {
+          focusTarget.focus({ preventScroll: true });
+        } catch (error) {
+          focusTarget.focus();
+        }
+      }
+    });
+  }
+
+  function closeFilterPanel() {
+    if (!filterPanel || !filterPanel.classList.contains('is-visible')) {
+      return;
+    }
+    filterPanel.classList.remove('is-visible');
+    filterPanel.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('filter-open');
+    if (filterToggle) {
+      filterToggle.setAttribute('aria-expanded', 'false');
+    }
+    window.setTimeout(() => {
+      if (filterPanel && !filterPanel.classList.contains('is-visible')) {
+        filterPanel.hidden = true;
+      }
+      const focusTarget = lastFilterTrigger || filterToggle;
+      if (focusTarget && typeof focusTarget.focus === 'function') {
+        try {
+          focusTarget.focus({ preventScroll: true });
+        } catch (error) {
+          focusTarget.focus();
+        }
+      }
+      lastFilterTrigger = null;
+    }, 260);
   }
 
   renderBoard();
@@ -470,18 +760,117 @@
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
+      if (filterPanel && filterPanel.classList.contains('is-visible')) {
+        closeFilterPanel();
+        return;
+      }
       hideDrawer();
     }
   });
 
-  if (filterInput) {
-    filterInput.addEventListener('input', (event) => {
-      filterValue = event.target.value || '';
-      const { visibleCount } = renderBoard();
-      const term = filterValue.trim().toLowerCase();
-      if (activeArticle && !matchesFilter(activeArticle, term)) {
-        hideDrawer();
+  if (filterToggle && filterPanel && filterSurface) {
+    filterToggle.addEventListener('click', () => {
+      openFilterPanel();
+    });
+  }
+
+  filterCloseControls.forEach((control) => {
+    control.addEventListener('click', closeFilterPanel);
+  });
+
+  if (applyFiltersButton) {
+    applyFiltersButton.addEventListener('click', () => {
+      closeFilterPanel();
+    });
+  }
+
+  if (filterPanel && filterSurface) {
+    filterPanel.addEventListener('transitionend', (event) => {
+      if (event.target === filterSurface && event.propertyName === 'transform' && !filterPanel.classList.contains('is-visible')) {
+        filterPanel.hidden = true;
       }
+    });
+  }
+
+  if (filterTextInput) {
+    filterTextInput.value = filterState.text;
+    filterTextInput.addEventListener('input', (event) => {
+      filterState.text = event.target.value || '';
+      handleFiltersUpdated();
+    });
+  }
+
+  const flagKeyMap = {
+    cves: 'cves',
+    actors: 'actors',
+    ttps: 'ttps',
+    iocs: 'iocs',
+  };
+
+  enrichmentFlags.forEach((flagControl) => {
+    const flagKey = flagControl.getAttribute('data-filter-flag');
+    const stateKey = flagKey ? flagKeyMap[flagKey] : undefined;
+    if (!stateKey) {
+      return;
+    }
+    const wrapper = flagControl.closest('.filter-panel__chip');
+    filterState[stateKey] = Boolean(flagControl.checked);
+    if (wrapper) {
+      wrapper.classList.toggle('is-active', flagControl.checked);
+    }
+    flagControl.addEventListener('change', () => {
+      const isChecked = flagControl.checked;
+      filterState[stateKey] = isChecked;
+      if (wrapper) {
+        wrapper.classList.toggle('is-active', isChecked);
+      }
+      handleFiltersUpdated();
+    });
+  });
+
+  if (clearFiltersButton) {
+    clearFiltersButton.addEventListener('click', () => {
+      filterState.text = '';
+      filterState.categories.clear();
+      filterState.sources.clear();
+      filterState.cves = false;
+      filterState.actors = false;
+      filterState.ttps = false;
+      filterState.iocs = false;
+
+      if (filterTextInput) {
+        filterTextInput.value = '';
+      }
+
+      if (categoryListNode) {
+        Array.from(categoryListNode.querySelectorAll('input')).forEach((input) => {
+          input.checked = false;
+          const option = input.closest('.filter-panel__option');
+          if (option) {
+            option.classList.remove('is-active');
+          }
+        });
+      }
+
+      if (sourceListNode) {
+        Array.from(sourceListNode.querySelectorAll('input')).forEach((input) => {
+          input.checked = false;
+          const option = input.closest('.filter-panel__option');
+          if (option) {
+            option.classList.remove('is-active');
+          }
+        });
+      }
+
+      enrichmentFlags.forEach((flagControl) => {
+        flagControl.checked = false;
+        const wrapper = flagControl.closest('.filter-panel__chip');
+        if (wrapper) {
+          wrapper.classList.remove('is-active');
+        }
+      });
+
+      handleFiltersUpdated();
     });
   }
 })();

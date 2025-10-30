@@ -24,17 +24,17 @@
           <div class="status-pill" data-total-count>0 items</div>
           <div class="status-pill status-pill--quiet" data-last-sync>Last updated moments ago</div>
         </div>
-        <label class="filter">
-          <span class="filter__label">Filter</span>
-          <input
-            type="search"
-            class="filter__input"
-            placeholder="Filter articles…"
-            data-filter-input
-            autocomplete="off"
-            spellcheck="false"
-          >
-        </label>
+        <button
+          type="button"
+          class="filter-toggle"
+          data-filter-toggle
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-controls="filter-panel"
+        >
+          <span class="filter-toggle__icon" aria-hidden="true">&#9881;</span>
+          <span data-filter-toggle-label>Advanced filters</span>
+        </button>
       </div>
     </header>
     <main class="app__main" role="main">
@@ -82,6 +82,64 @@
       </section>
     </div>
   </aside>
+  <div class="filter-panel" id="filter-panel" data-filter-panel aria-hidden="true" hidden>
+    <div class="filter-panel__backdrop" data-filter-close></div>
+    <div class="filter-panel__surface" role="dialog" aria-modal="true" aria-labelledby="filter-panel-title" tabindex="-1">
+      <header class="filter-panel__header">
+        <div>
+          <p class="filter-panel__eyebrow">Advanced filters</p>
+          <h2 class="filter-panel__title" id="filter-panel-title">Refine visible articles</h2>
+        </div>
+        <button type="button" class="filter-panel__close" data-filter-close aria-label="Close filters">&times;</button>
+      </header>
+      <div class="filter-panel__content">
+        <section class="filter-panel__section">
+          <h3>Keyword</h3>
+          <input
+            type="search"
+            class="filter-panel__input"
+            placeholder="Search titles, summaries, metadata…"
+            data-filter-text
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </section>
+        <section class="filter-panel__section" data-filter-section="categories">
+          <h3>Categories</h3>
+          <div class="filter-panel__options" data-filter-category-list></div>
+        </section>
+        <section class="filter-panel__section" data-filter-section="sources">
+          <h3>Sources</h3>
+          <div class="filter-panel__options" data-filter-source-list></div>
+        </section>
+        <section class="filter-panel__section">
+          <h3>Enrichment</h3>
+          <div class="filter-panel__options filter-panel__options--inline">
+            <label class="filter-panel__chip">
+              <input type="checkbox" data-filter-flag="cves">
+              <span>Has CVEs</span>
+            </label>
+            <label class="filter-panel__chip">
+              <input type="checkbox" data-filter-flag="actors">
+              <span>Has threat actors</span>
+            </label>
+            <label class="filter-panel__chip">
+              <input type="checkbox" data-filter-flag="ttps">
+              <span>Has TTPs</span>
+            </label>
+            <label class="filter-panel__chip">
+              <input type="checkbox" data-filter-flag="iocs">
+              <span>Has IOCs</span>
+            </label>
+          </div>
+        </section>
+      </div>
+      <footer class="filter-panel__footer">
+        <button type="button" class="filter-panel__clear" data-filter-clear>Clear filters</button>
+        <button type="button" class="filter-panel__apply" data-filter-apply>Close</button>
+      </footer>
+    </div>
+  </div>
   <script id="article-data" type="application/json">[]</script>
   <script src="app.js"></script>
 </body>
