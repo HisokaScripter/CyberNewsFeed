@@ -244,6 +244,38 @@ body.filter-open {
 
 .card__footer {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card__link-button {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #050c1a;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  text-decoration: none;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.card__link-button:focus-visible,
+.card__link-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(0, 243, 255, 0.25);
+}
+
+.card__link-button:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.card__meta {
+  display: flex;
   flex-wrap: wrap;
   gap: 8px;
   color: var(--text-muted);
@@ -339,18 +371,6 @@ body.filter-open {
   font-size: 0.85rem;
 }
 
-.drawer__link {
-  align-self: flex-start;
-  color: var(--accent);
-  font-weight: 600;
-  text-decoration: none;
-  font-size: 0.9rem;
-}
-
-.drawer__link:hover {
-  text-decoration: underline;
-}
-
 .drawer__section {
   display: none;
   flex-direction: column;
@@ -363,6 +383,42 @@ body.filter-open {
 
 .drawer__section.is-visible {
   display: flex;
+}
+
+.drawer__section--source {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.drawer__source-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(0, 243, 255, 0.9), rgba(0, 173, 255, 0.9));
+  color: #041225;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.drawer__source-button.is-disabled {
+  pointer-events: none;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.drawer__source-button:focus-visible,
+.drawer__source-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(0, 243, 255, 0.2);
+}
+
+.drawer__source-button:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .drawer__section h3 {
