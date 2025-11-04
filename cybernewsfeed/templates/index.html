@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CyberSignal Intelligence Stream</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="app__topbar" role="banner">
+      <div class="app__brand">
+        <span class="app__logo" aria-hidden="true">CN</span>
+        <div>
+          <p class="app__product">CyberSignal</p>
+          <p class="app__tagline">Live situational intelligence</p>
+        </div>
+      </div>
+      <div class="app__controls">
+        <div class="app__status">
+          <div class="status-pill" data-total-count>0 items</div>
+          <div class="status-pill status-pill--quiet" data-last-sync>Last updated moments ago</div>
+        </div>
+        <button
+          type="button"
+          class="filter-toggle"
+          data-filter-toggle
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-controls="filter-panel"
+        >
+          <span class="filter-toggle__icon" aria-hidden="true">&#9881;</span>
+          <span data-filter-toggle-label>Advanced filters</span>
+        </button>
+      </div>
+    </header>
+    <main class="app__main" role="main">
+      <section class="board" data-category-board aria-live="polite">
+        <p class="board__empty" data-board-empty>No articles available yet. Add a JSON feed to populate the dashboard.</p>
+      </section>
+    </main>
+  </div>
+  <aside class="drawer" data-detail-panel aria-hidden="true" hidden>
+    <div class="drawer__backdrop" data-drawer-close></div>
+    <div class="drawer__surface" role="dialog" aria-modal="true" aria-labelledby="drawer-title" tabindex="-1">
+      <button type="button" class="drawer__close" data-drawer-close aria-label="Close details">&times;</button>
+      <div class="drawer__intro">
+        <div class="drawer__eyebrow" data-detail="categories"></div>
+        <h2 class="drawer__title" id="drawer-title" data-detail="title"></h2>
+        <div class="drawer__meta">
+          <span class="drawer__source" data-detail="source"></span>
+          <span class="drawer__date" data-detail="date"></span>
+        </div>
+      </div>
+      <section class="drawer__section drawer__section--source" data-section="link">
+        <h3>Source</h3>
+        <a
+          class="drawer__source-button is-disabled"
+          data-detail="link"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-disabled="true"
+        >
+          Open original article
+        </a>
+      </section>
+      <section class="drawer__section" data-section="summary">
+        <h3>AI summary</h3>
+        <p class="drawer__body" data-detail="AI-Summary"></p>
+      </section>
+      <section class="drawer__section" data-section="notes">
+        <h3>Analyst notes</h3>
+        <p class="drawer__body" data-detail="notes"></p>
+      </section>
+      <section class="drawer__section" data-section="ThreatActors">
+        <h3>Threat actors</h3>
+        <div class="drawer__pills" data-detail="ThreatActors"></div>
+      </section>
+      <section class="drawer__section" data-section="TTPs">
+        <h3>Tactics &amp; techniques</h3>
+        <div class="drawer__pills" data-detail="TTPs"></div>
+      </section>
+      <section class="drawer__section" data-section="iocs">
+        <h3>Indicators of compromise</h3>
+        <div class="drawer__pills" data-detail="iocs"></div>
+      </section>
+      <section class="drawer__section" data-section="CVEs">
+        <h3>CVEs</h3>
+        <ul class="drawer__list" data-detail="CVEs"></ul>
+      </section>
+    </div>
+  </aside>
+  <div class="filter-panel" id="filter-panel" data-filter-panel aria-hidden="true" hidden>
+    <div class="filter-panel__backdrop" data-filter-close></div>
+    <div class="filter-panel__surface" role="dialog" aria-modal="true" aria-labelledby="filter-panel-title" tabindex="-1">
+      <header class="filter-panel__header">
+        <div>
+          <p class="filter-panel__eyebrow">Advanced filters</p>
+          <h2 class="filter-panel__title" id="filter-panel-title">Refine visible articles</h2>
+        </div>
+        <button type="button" class="filter-panel__close" data-filter-close aria-label="Close filters">&times;</button>
+      </header>
+      <div class="filter-panel__content">
+        <section class="filter-panel__section">
+          <h3>Keyword</h3>
+          <input
+            type="search"
+            class="filter-panel__input"
+            placeholder="Search titles, summaries, metadata…"
+            data-filter-text
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </section>
+        <section class="filter-panel__section" data-filter-section="categories">
+          <h3>Categories</h3>
+          <div class="filter-panel__options" data-filter-category-list></div>
+        </section>
+        <section class="filter-panel__section" data-filter-section="sources">
+          <h3>Sources</h3>
+          <div class="filter-panel__options" data-filter-source-list></div>
+        </section>
+        <section class="filter-panel__section">
+          <h3>Enrichment</h3>
+          <div class="filter-panel__options filter-panel__options--inline">
+            <label class="filter-panel__chip">
+              <input type="checkbox" data-filter-flag="cves">
+              <span>Has CVEs</span>
+            </label>
+            <label class="filter-panel__chip">
+              <input type="checkbox" data-filter-flag="actors">
+              <span>Has threat actors</span>
+            </label>
+            <label class="filter-panel__chip">
+              <input type="checkbox" data-filter-flag="ttps">
+              <span>Has TTPs</span>
+            </label>
+            <label class="filter-panel__chip">
+              <input type="checkbox" data-filter-flag="iocs">
+              <span>Has IOCs</span>
+            </label>
+          </div>
+        </section>
+      </div>
+      <footer class="filter-panel__footer">
+        <button type="button" class="filter-panel__clear" data-filter-clear>Clear filters</button>
+        <button type="button" class="filter-panel__apply" data-filter-apply>Close</button>
+      </footer>
+    </div>
+  </div>
+  <script id="article-data" type="application/json">$articles_json</script>
+  <script src="app.js"></script>
+</body>
+</html>
