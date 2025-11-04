@@ -124,6 +124,58 @@
     return `${value.slice(0, maxLength - 1).trim()}…`;
   }
 
+  function parseDateValue(value) {
+    if (!value) {
+      return null;
+    }
+    if (value instanceof Date) {
+      const timestamp = value.getTime();
+      return Number.isNaN(timestamp) ? null : timestamp;
+    }
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+      if (value < 0) {
+        return null;
+      }
+      return value < 1e12 ? value * 1000 : value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const parsed = Date.parse(trimmed);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) {
+        return parseDateValue(numeric);
+      }
+    }
+    return null;
+  }
+
+  function resolveArticleTimestamp(article) {
+    const candidates = [
+      article.date,
+      article.published,
+      article.timestamp,
+      article.published_at,
+      article.created_at,
+      article.updated_at,
+    ];
+    for (let i = 0; i < candidates.length; i += 1) {
+      const timestamp = parseDateValue(candidates[i]);
+      if (timestamp !== null) {
+        return timestamp;
+      }
+    }
+    return 0;
+  }
+
   function renderPills(container, values) {
     container.textContent = '';
     values.forEach((value) => {
@@ -458,7 +510,8 @@
       columns.set(resolvedCategory, []);
       columnOrder.push(resolvedCategory);
     }
-    columns.get(resolvedCategory).push({ article, index });
+    const timestamp = resolveArticleTimestamp(article);
+    columns.get(resolvedCategory).push({ article, index, timestamp });
 
     if (primaryCategory) {
       availableCategories.add(String(primaryCategory).trim());
@@ -482,6 +535,18 @@
         availableSources.add(source);
       }
     });
+  });
+
+  columnOrder.forEach((categoryName) => {
+    const items = columns.get(categoryName);
+    if (items) {
+      items.sort((a, b) => {
+        if (b.timestamp !== a.timestamp) {
+          return b.timestamp - a.timestamp;
+        }
+        return a.index - b.index;
+      });
+    }
   });
 
   const sortedCategoryOptions = sortFilterValues(Array.from(availableCategories));
@@ -584,6 +649,23 @@
 
         const footer = document.createElement('div');
         footer.className = 'card__footer';
+
+        const linkTarget = article.url || article.link || article.article_url;
+        if (linkTarget) {
+          const linkButton = document.createElement('a');
+          linkButton.className = 'card__link-button';
+          linkButton.href = linkTarget;
+          linkButton.target = '_blank';
+          linkButton.rel = 'noopener noreferrer';
+          linkButton.textContent = 'View article';
+          linkButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+          });
+          footer.appendChild(linkButton);
+        }
+
+        const meta = document.createElement('div');
+        meta.className = 'card__meta';
         const cves = normaliseList(article.CVEs || article.cves);
         const actors = normaliseList(article.ThreatActors || article.threat_actors);
         const ttps = normaliseList(article.TTPs || article.ttps);
@@ -611,8 +693,10 @@
           const pill = document.createElement('span');
           pill.className = 'card__meta-pill';
           pill.textContent = entry;
-          footer.appendChild(pill);
+          meta.appendChild(pill);
         });
+
+        footer.appendChild(meta);
 
         card.appendChild(cardHeader);
         card.appendChild(summary);
