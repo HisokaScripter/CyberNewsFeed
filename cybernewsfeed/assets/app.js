@@ -439,11 +439,10 @@
       const url = article.url || article.link || article.article_url;
       if (url) {
         detailRefs.link.href = url;
-        detailRefs.link.removeAttribute('hidden');
       } else {
-        detailRefs.link.href = '#';
-        detailRefs.link.setAttribute('hidden', 'hidden');
+        detailRefs.link.removeAttribute('href');
       }
+      showSection('link', Boolean(url));
     }
 
     if (detailRefs.summary) {
