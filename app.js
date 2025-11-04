@@ -83,20 +83,122 @@
       .replace(/'/g, '&#39;');
   }
 
+  function extractLabelFromObject(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return '';
+    }
+    const preferredKeys = ['name', 'title', 'label', 'source', 'provider', 'display', 'value'];
+    for (let i = 0; i < preferredKeys.length; i += 1) {
+      const key = preferredKeys[i];
+      const value = entry[key];
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+    if (typeof entry.text === 'string') {
+      const trimmed = entry.text.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+    return '';
+  }
+
   function normaliseList(value) {
     if (!value) {
       return [];
     }
-    if (Array.isArray(value)) {
-      return value.map((entry) => String(entry).trim()).filter(Boolean);
+
+    const values = Array.isArray(value) ? value : [value];
+    const results = [];
+
+    values.forEach((entry) => {
+      if (entry === null || entry === undefined) {
+        return;
+      }
+
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (trimmed) {
+          trimmed
+            .split(',')
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .forEach((part) => {
+              results.push(part);
+            });
+        }
+        return;
+      }
+
+      if (Array.isArray(entry)) {
+        normaliseList(entry).forEach((part) => {
+          results.push(part);
+        });
+        return;
+      }
+
+      if (typeof entry === 'object') {
+        const label = extractLabelFromObject(entry);
+        if (label) {
+          results.push(label);
+        }
+        return;
+      }
+
+      const coerced = String(entry).trim();
+      if (coerced) {
+        results.push(coerced);
+      }
+    });
+
+    return results;
+  }
+
+  function collectSourceLabels(article) {
+    if (!article || typeof article !== 'object') {
+      return [];
     }
-    if (typeof value === 'string') {
-      return value
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter(Boolean);
+
+    const seen = new Set();
+    const labels = [];
+    const candidates = [
+      article.sources,
+      article.source,
+      article.provider,
+      article.feed_source,
+      article.feedSource,
+      article.metadata && article.metadata.source,
+      article.feed && article.feed.source,
+    ];
+
+    candidates.forEach((candidate) => {
+      normaliseList(candidate).forEach((label) => {
+        const trimmed = label.trim();
+        if (!trimmed) {
+          return;
+        }
+        const key = trimmed.toLowerCase();
+        if (seen.has(key)) {
+          return;
+        }
+        seen.add(key);
+        labels.push(trimmed);
+      });
+    });
+
+    return labels;
+  }
+
+  function resolvePrimarySource(article) {
+    const labels = collectSourceLabels(article);
+    if (labels.length > 0) {
+      return labels[0];
     }
-    return [String(value).trim()].filter(Boolean);
+    return 'Unknown source';
   }
 
   function sortFilterValues(values) {
@@ -307,14 +409,11 @@
     }
 
     if (filterState.sources.size > 0) {
-      const sources = new Set(normaliseList(article.sources));
-      const fallbackSource = article.source || article.provider || article.feed_source;
-      if (fallbackSource) {
-        sources.add(String(fallbackSource).trim());
-      }
+      const sourceLabels = collectSourceLabels(article);
+      const lookup = new Set(sourceLabels.map((label) => label.toLowerCase()));
       let matchesSource = false;
       filterState.sources.forEach((value) => {
-        if (sources.has(value)) {
+        if (lookup.has(String(value).toLowerCase())) {
           matchesSource = true;
         }
       });
@@ -372,6 +471,129 @@
     }
   }
 
+  function extractUrlFromValue(value, seen) {
+    if (!value) {
+      return null;
+    }
+
+    if (!seen) {
+      seen = new Set();
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+      if (/^https?:\/\//i.test(trimmed)) {
+        return trimmed;
+      }
+      return null;
+    }
+
+    if (typeof value !== 'object') {
+      return null;
+    }
+
+    if (seen.has(value)) {
+      return null;
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i += 1) {
+        const nestedUrl = extractUrlFromValue(value[i], seen);
+        if (nestedUrl) {
+          return nestedUrl;
+        }
+      }
+      return null;
+    }
+
+    const preferredKeys = [
+      'url',
+      'link',
+      'href',
+      'article_url',
+      'articleUrl',
+      'article_link',
+      'articleLink',
+      'source_url',
+      'sourceUrl',
+      'source_link',
+      'sourceLink',
+      'news_url',
+      'newsUrl',
+      'story_url',
+      'storyUrl',
+      'website',
+      'permalink',
+    ];
+
+    for (let i = 0; i < preferredKeys.length; i += 1) {
+      const key = preferredKeys[i];
+      if (key in value) {
+        const nestedUrl = extractUrlFromValue(value[key], seen);
+        if (nestedUrl) {
+          return nestedUrl;
+        }
+      }
+    }
+
+    const objectValues = Object.values(value);
+    for (let i = 0; i < objectValues.length; i += 1) {
+      const nestedUrl = extractUrlFromValue(objectValues[i], seen);
+      if (nestedUrl) {
+        return nestedUrl;
+      }
+    }
+
+    return null;
+  }
+
+  function resolveArticleUrl(article) {
+    if (!article || typeof article !== 'object') {
+      return null;
+    }
+
+    const candidates = [
+      article.url,
+      article.link,
+      article.article_url,
+      article.articleUrl,
+      article.article_link,
+      article.articleLink,
+      article.source_url,
+      article.sourceUrl,
+      article.source_link,
+      article.sourceLink,
+      article.news_url,
+      article.newsUrl,
+      article.story_url,
+      article.storyUrl,
+      article.href,
+      article.guid,
+      article.id,
+    ];
+
+    for (let i = 0; i < candidates.length; i += 1) {
+      const directUrl = extractUrlFromValue(candidates[i]);
+      if (directUrl) {
+        return directUrl;
+      }
+    }
+
+    const nestedCollections = [article.links, article.references, article.source, article.sources];
+    for (let i = 0; i < nestedCollections.length; i += 1) {
+      const url = extractUrlFromValue(nestedCollections[i]);
+      if (url) {
+        return url;
+      }
+    }
+
+    return null;
+  }
+
   function showDrawer(article) {
     activeArticle = article;
     document.body.classList.add('drawer-open');
@@ -424,10 +646,11 @@
       detailRefs.title.textContent = title;
     }
 
+    const sourceLabels = collectSourceLabels(article);
+    const primarySource = sourceLabels[0] || 'Unknown source';
+
     if (detailRefs.source) {
-      const sourceList = normaliseList(article.sources);
-      const fallback = article.source || sourceList[0] || 'Unknown source';
-      detailRefs.source.textContent = fallback;
+      detailRefs.source.textContent = primarySource;
     }
 
     if (detailRefs.date) {
@@ -436,14 +659,21 @@
     }
 
     if (detailRefs.link) {
-      const url = article.url || article.link || article.article_url;
+      const url = resolveArticleUrl(article);
       if (url) {
         detailRefs.link.href = url;
-        detailRefs.link.removeAttribute('hidden');
+        detailRefs.link.textContent = primarySource !== 'Unknown source'
+          ? `View on ${primarySource}`
+          : 'Open original article';
+        detailRefs.link.removeAttribute('aria-disabled');
+        detailRefs.link.classList.remove('is-disabled');
       } else {
-        detailRefs.link.href = '#';
-        detailRefs.link.setAttribute('hidden', 'hidden');
+        detailRefs.link.removeAttribute('href');
+        detailRefs.link.textContent = 'Open original article';
+        detailRefs.link.setAttribute('aria-disabled', 'true');
+        detailRefs.link.classList.add('is-disabled');
       }
+      showSection('link', Boolean(url));
     }
 
     if (detailRefs.summary) {
@@ -525,12 +755,7 @@
       }
     });
 
-    const sourceList = normaliseList(article.sources);
-    const fallbackSource = article.source || article.provider || article.feed_source;
-    if (fallbackSource) {
-      sourceList.push(String(fallbackSource).trim());
-    }
-    sourceList.forEach((source) => {
+    collectSourceLabels(article).forEach((source) => {
       if (source) {
         availableSources.add(source);
       }
@@ -638,7 +863,7 @@
 
         const cardHeader = document.createElement('div');
         cardHeader.className = 'card__header';
-        const source = normaliseList(article.sources)[0] || article.source || 'Unknown source';
+        const source = resolvePrimarySource(article);
         const dateLabel = article.date || article.published || article.timestamp || '';
         cardHeader.innerHTML = `<span>${escapeHTML(source)}</span><span>${escapeHTML(dateLabel)}</span>`;
 
@@ -650,14 +875,16 @@
         const footer = document.createElement('div');
         footer.className = 'card__footer';
 
-        const linkTarget = article.url || article.link || article.article_url;
+        const linkTarget = resolveArticleUrl(article);
         if (linkTarget) {
           const linkButton = document.createElement('a');
           linkButton.className = 'card__link-button';
           linkButton.href = linkTarget;
           linkButton.target = '_blank';
           linkButton.rel = 'noopener noreferrer';
-          linkButton.textContent = 'View article';
+          linkButton.textContent = source && source !== 'Unknown source'
+            ? `View on ${source}`
+            : 'View article';
           linkButton.addEventListener('click', (event) => {
             event.stopPropagation();
           });
