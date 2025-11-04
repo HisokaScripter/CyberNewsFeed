@@ -83,20 +83,79 @@
       .replace(/'/g, '&#39;');
   }
 
+  function extractLabelFromObject(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return '';
+    }
+    const preferredKeys = ['name', 'title', 'label', 'source', 'provider', 'display'];
+    for (let i = 0; i < preferredKeys.length; i += 1) {
+      const key = preferredKeys[i];
+      const value = entry[key];
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+    if (typeof entry.text === 'string') {
+      const trimmed = entry.text.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+    return '';
+  }
+
   function normaliseList(value) {
     if (!value) {
       return [];
     }
-    if (Array.isArray(value)) {
-      return value.map((entry) => String(entry).trim()).filter(Boolean);
-    }
-    if (typeof value === 'string') {
-      return value
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-    }
-    return [String(value).trim()].filter(Boolean);
+
+    const values = Array.isArray(value) ? value : [value];
+    const results = [];
+
+    values.forEach((entry) => {
+      if (entry === null || entry === undefined) {
+        return;
+      }
+
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (trimmed) {
+          trimmed
+            .split(',')
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .forEach((part) => {
+              results.push(part);
+            });
+        }
+        return;
+      }
+
+      if (Array.isArray(entry)) {
+        normaliseList(entry).forEach((part) => {
+          results.push(part);
+        });
+        return;
+      }
+
+      if (typeof entry === 'object') {
+        const label = extractLabelFromObject(entry);
+        if (label) {
+          results.push(label);
+        }
+        return;
+      }
+
+      const coerced = String(entry).trim();
+      if (coerced) {
+        results.push(coerced);
+      }
+    });
+
+    return results;
   }
 
   function sortFilterValues(values) {
@@ -372,6 +431,129 @@
     }
   }
 
+  function extractUrlFromValue(value, seen) {
+    if (!value) {
+      return null;
+    }
+
+    if (!seen) {
+      seen = new Set();
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+      if (/^https?:\/\//i.test(trimmed)) {
+        return trimmed;
+      }
+      return null;
+    }
+
+    if (typeof value !== 'object') {
+      return null;
+    }
+
+    if (seen.has(value)) {
+      return null;
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i += 1) {
+        const nestedUrl = extractUrlFromValue(value[i], seen);
+        if (nestedUrl) {
+          return nestedUrl;
+        }
+      }
+      return null;
+    }
+
+    const preferredKeys = [
+      'url',
+      'link',
+      'href',
+      'article_url',
+      'articleUrl',
+      'article_link',
+      'articleLink',
+      'source_url',
+      'sourceUrl',
+      'source_link',
+      'sourceLink',
+      'news_url',
+      'newsUrl',
+      'story_url',
+      'storyUrl',
+      'website',
+      'permalink',
+    ];
+
+    for (let i = 0; i < preferredKeys.length; i += 1) {
+      const key = preferredKeys[i];
+      if (key in value) {
+        const nestedUrl = extractUrlFromValue(value[key], seen);
+        if (nestedUrl) {
+          return nestedUrl;
+        }
+      }
+    }
+
+    const objectValues = Object.values(value);
+    for (let i = 0; i < objectValues.length; i += 1) {
+      const nestedUrl = extractUrlFromValue(objectValues[i], seen);
+      if (nestedUrl) {
+        return nestedUrl;
+      }
+    }
+
+    return null;
+  }
+
+  function resolveArticleUrl(article) {
+    if (!article || typeof article !== 'object') {
+      return null;
+    }
+
+    const candidates = [
+      article.url,
+      article.link,
+      article.article_url,
+      article.articleUrl,
+      article.article_link,
+      article.articleLink,
+      article.source_url,
+      article.sourceUrl,
+      article.source_link,
+      article.sourceLink,
+      article.news_url,
+      article.newsUrl,
+      article.story_url,
+      article.storyUrl,
+      article.href,
+      article.guid,
+      article.id,
+    ];
+
+    for (let i = 0; i < candidates.length; i += 1) {
+      const directUrl = extractUrlFromValue(candidates[i]);
+      if (directUrl) {
+        return directUrl;
+      }
+    }
+
+    const nestedCollections = [article.links, article.references, article.source, article.sources];
+    for (let i = 0; i < nestedCollections.length; i += 1) {
+      const url = extractUrlFromValue(nestedCollections[i]);
+      if (url) {
+        return url;
+      }
+    }
+
+    return null;
+  }
+
   function showDrawer(article) {
     activeArticle = article;
     document.body.classList.add('drawer-open');
@@ -436,7 +618,7 @@
     }
 
     if (detailRefs.link) {
-      const url = article.url || article.link || article.article_url;
+      const url = resolveArticleUrl(article);
       if (url) {
         detailRefs.link.href = url;
       } else {
@@ -649,7 +831,7 @@
         const footer = document.createElement('div');
         footer.className = 'card__footer';
 
-        const linkTarget = article.url || article.link || article.article_url;
+        const linkTarget = resolveArticleUrl(article);
         if (linkTarget) {
           const linkButton = document.createElement('a');
           linkButton.className = 'card__link-button';
