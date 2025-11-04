@@ -87,7 +87,7 @@
     if (!entry || typeof entry !== 'object') {
       return '';
     }
-    const preferredKeys = ['name', 'title', 'label', 'source', 'provider', 'display'];
+    const preferredKeys = ['name', 'title', 'label', 'source', 'provider', 'display', 'value'];
     for (let i = 0; i < preferredKeys.length; i += 1) {
       const key = preferredKeys[i];
       const value = entry[key];
@@ -156,6 +156,49 @@
     });
 
     return results;
+  }
+
+  function collectSourceLabels(article) {
+    if (!article || typeof article !== 'object') {
+      return [];
+    }
+
+    const seen = new Set();
+    const labels = [];
+    const candidates = [
+      article.sources,
+      article.source,
+      article.provider,
+      article.feed_source,
+      article.feedSource,
+      article.metadata && article.metadata.source,
+      article.feed && article.feed.source,
+    ];
+
+    candidates.forEach((candidate) => {
+      normaliseList(candidate).forEach((label) => {
+        const trimmed = label.trim();
+        if (!trimmed) {
+          return;
+        }
+        const key = trimmed.toLowerCase();
+        if (seen.has(key)) {
+          return;
+        }
+        seen.add(key);
+        labels.push(trimmed);
+      });
+    });
+
+    return labels;
+  }
+
+  function resolvePrimarySource(article) {
+    const labels = collectSourceLabels(article);
+    if (labels.length > 0) {
+      return labels[0];
+    }
+    return 'Unknown source';
   }
 
   function sortFilterValues(values) {
@@ -366,14 +409,11 @@
     }
 
     if (filterState.sources.size > 0) {
-      const sources = new Set(normaliseList(article.sources));
-      const fallbackSource = article.source || article.provider || article.feed_source;
-      if (fallbackSource) {
-        sources.add(String(fallbackSource).trim());
-      }
+      const sourceLabels = collectSourceLabels(article);
+      const lookup = new Set(sourceLabels.map((label) => label.toLowerCase()));
       let matchesSource = false;
       filterState.sources.forEach((value) => {
-        if (sources.has(value)) {
+        if (lookup.has(String(value).toLowerCase())) {
           matchesSource = true;
         }
       });
@@ -606,10 +646,11 @@
       detailRefs.title.textContent = title;
     }
 
+    const sourceLabels = collectSourceLabels(article);
+    const primarySource = sourceLabels[0] || 'Unknown source';
+
     if (detailRefs.source) {
-      const sourceList = normaliseList(article.sources);
-      const fallback = article.source || sourceList[0] || 'Unknown source';
-      detailRefs.source.textContent = fallback;
+      detailRefs.source.textContent = primarySource;
     }
 
     if (detailRefs.date) {
@@ -621,8 +662,16 @@
       const url = resolveArticleUrl(article);
       if (url) {
         detailRefs.link.href = url;
+        detailRefs.link.textContent = primarySource !== 'Unknown source'
+          ? `View on ${primarySource}`
+          : 'Open original article';
+        detailRefs.link.removeAttribute('aria-disabled');
+        detailRefs.link.classList.remove('is-disabled');
       } else {
         detailRefs.link.removeAttribute('href');
+        detailRefs.link.textContent = 'Open original article';
+        detailRefs.link.setAttribute('aria-disabled', 'true');
+        detailRefs.link.classList.add('is-disabled');
       }
       showSection('link', Boolean(url));
     }
@@ -706,12 +755,7 @@
       }
     });
 
-    const sourceList = normaliseList(article.sources);
-    const fallbackSource = article.source || article.provider || article.feed_source;
-    if (fallbackSource) {
-      sourceList.push(String(fallbackSource).trim());
-    }
-    sourceList.forEach((source) => {
+    collectSourceLabels(article).forEach((source) => {
       if (source) {
         availableSources.add(source);
       }
@@ -819,7 +863,7 @@
 
         const cardHeader = document.createElement('div');
         cardHeader.className = 'card__header';
-        const source = normaliseList(article.sources)[0] || article.source || 'Unknown source';
+        const source = resolvePrimarySource(article);
         const dateLabel = article.date || article.published || article.timestamp || '';
         cardHeader.innerHTML = `<span>${escapeHTML(source)}</span><span>${escapeHTML(dateLabel)}</span>`;
 
@@ -838,7 +882,9 @@
           linkButton.href = linkTarget;
           linkButton.target = '_blank';
           linkButton.rel = 'noopener noreferrer';
-          linkButton.textContent = 'View article';
+          linkButton.textContent = source && source !== 'Unknown source'
+            ? `View on ${source}`
+            : 'View article';
           linkButton.addEventListener('click', (event) => {
             event.stopPropagation();
           });

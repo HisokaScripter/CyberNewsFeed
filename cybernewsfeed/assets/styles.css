@@ -404,6 +404,12 @@ body.filter-open {
   transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
+.drawer__source-button.is-disabled {
+  pointer-events: none;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
 .drawer__source-button:focus-visible,
 .drawer__source-button:hover {
   transform: translateY(-1px);
