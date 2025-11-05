@@ -43,7 +43,7 @@
     title: drawer.querySelector('[data-detail="title"]'),
     sources: drawer.querySelector('[data-detail="sources"]'),
     date: drawer.querySelector('[data-detail="date"]'),
-    link: drawer.querySelector('[data-detail="link"]'),
+    links: drawer.querySelector('[data-detail="links"]'),
     summary: drawer.querySelector('[data-detail="AI-Summary"]'),
     notes: drawer.querySelector('[data-detail="notes"]'),
     ThreatActors: drawer.querySelector('[data-detail="ThreatActors"]'),
@@ -158,14 +158,72 @@
     return results;
   }
 
-  function collectSourceLabels(article) {
+  function deriveLabelFromUrl(url) {
+    if (!url) {
+      return '';
+    }
+
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname.replace(/^www\./i, '');
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function collectSourceRecords(article) {
     if (!article || typeof article !== 'object') {
       return [];
     }
 
     const seen = new Set();
-    const labels = [];
-    const candidates = [
+    const records = [];
+    const fallbackUrl = resolveArticleUrl(article);
+
+    function pushRecord(label, url) {
+      const cleanedUrl = url ? extractUrlFromValue(url) : null;
+      const trimmedLabel = typeof label === 'string' ? label.trim() : '';
+      const finalLabel = trimmedLabel || deriveLabelFromUrl(cleanedUrl) || 'Unknown source';
+      const key = `${finalLabel.toLowerCase()}|${cleanedUrl || ''}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      records.push({ label: finalLabel, url: cleanedUrl });
+    }
+
+    function handleEntry(entry) {
+      if (entry === null || entry === undefined) {
+        return;
+      }
+
+      if (Array.isArray(entry)) {
+        entry.forEach((value) => handleEntry(value));
+        return;
+      }
+
+      if (typeof entry === 'object') {
+        const label = extractLabelFromObject(entry);
+        const url = extractUrlFromValue(entry);
+        if (label || url) {
+          pushRecord(label, url);
+          return;
+        }
+        Object.values(entry).forEach((value) => {
+          handleEntry(value);
+        });
+        return;
+      }
+
+      if (typeof entry === 'string') {
+        pushRecord(entry, fallbackUrl);
+        return;
+      }
+
+      pushRecord(String(entry), fallbackUrl);
+    }
+
+    const collections = [
       article.sources,
       article.source,
       article.provider,
@@ -175,22 +233,29 @@
       article.feed && article.feed.source,
     ];
 
-    candidates.forEach((candidate) => {
-      normaliseList(candidate).forEach((label) => {
-        const trimmed = label.trim();
-        if (!trimmed) {
-          return;
-        }
-        const key = trimmed.toLowerCase();
-        if (seen.has(key)) {
-          return;
-        }
-        seen.add(key);
-        labels.push(trimmed);
-      });
+    collections.forEach((collection) => {
+      handleEntry(collection);
     });
 
-    return labels;
+    if (records.length === 0) {
+      const fallbackLabel =
+        (typeof article.source === 'string' && article.source) ||
+        (typeof article.provider === 'string' && article.provider) ||
+        deriveLabelFromUrl(fallbackUrl) ||
+        '';
+
+      if (fallbackLabel || fallbackUrl) {
+        pushRecord(fallbackLabel || 'Unknown source', fallbackUrl);
+      }
+    }
+
+    return records;
+  }
+
+  function collectSourceLabels(article) {
+    return collectSourceRecords(article)
+      .map((record) => record.label)
+      .filter(Boolean);
   }
 
   function sortFilterValues(values) {
@@ -293,6 +358,39 @@
       pill.textContent = value;
       container.appendChild(pill);
     });
+  }
+
+  function renderDetailSourceButtons(container, records) {
+    if (!container) {
+      return false;
+    }
+
+    container.textContent = '';
+    let hasLinks = false;
+
+    (records || []).forEach((record) => {
+      if (!record || !record.url) {
+        return;
+      }
+
+      const link = document.createElement('a');
+      link.className = 'drawer__source-button';
+      link.href = record.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = record.label ? `View on ${record.label}` : 'Open original article';
+      container.appendChild(link);
+      hasLinks = true;
+    });
+
+    if (!hasLinks) {
+      const placeholder = document.createElement('p');
+      placeholder.className = 'drawer__source-empty';
+      placeholder.textContent = 'No source links available.';
+      container.appendChild(placeholder);
+    }
+
+    return hasLinks;
   }
 
   function renderList(container, values) {
@@ -653,8 +751,8 @@
       detailRefs.title.textContent = title;
     }
 
-    const sourceLabels = collectSourceLabels(article);
-    const primarySource = sourceLabels[0] || 'Unknown source';
+    const sourceRecords = collectSourceRecords(article);
+    const sourceLabels = sourceRecords.map((record) => record.label);
 
     if (detailRefs.sources) {
       renderSourceChips(detailRefs.sources, sourceLabels);
@@ -665,22 +763,9 @@
       detailRefs.date.textContent = dateValue ? String(dateValue) : '';
     }
 
-    if (detailRefs.link) {
-      const url = resolveArticleUrl(article);
-      if (url) {
-        detailRefs.link.href = url;
-        detailRefs.link.textContent = primarySource !== 'Unknown source'
-          ? `View on ${primarySource}`
-          : 'Open original article';
-        detailRefs.link.removeAttribute('aria-disabled');
-        detailRefs.link.classList.remove('is-disabled');
-      } else {
-        detailRefs.link.removeAttribute('href');
-        detailRefs.link.textContent = 'Open original article';
-        detailRefs.link.setAttribute('aria-disabled', 'true');
-        detailRefs.link.classList.add('is-disabled');
-      }
-      showSection('link', Boolean(url));
+    if (detailRefs.links) {
+      const hasLinks = renderDetailSourceButtons(detailRefs.links, sourceRecords);
+      showSection('link', hasLinks || sourceRecords.length > 0);
     }
 
     if (detailRefs.summary) {
@@ -870,7 +955,8 @@
 
         const cardHeader = document.createElement('div');
         cardHeader.className = 'card__header';
-        const sourceLabels = collectSourceLabels(article);
+        const sourceRecords = collectSourceRecords(article);
+        const sourceLabels = sourceRecords.map((record) => record.label);
         const primarySource = sourceLabels[0] || 'Unknown source';
         const dateLabel = article.date || article.published || article.timestamp || '';
 
@@ -902,20 +988,28 @@
         const footer = document.createElement('div');
         footer.className = 'card__footer';
 
-        const linkTarget = resolveArticleUrl(article);
-        if (linkTarget) {
-          const linkButton = document.createElement('a');
-          linkButton.className = 'card__link-button';
-          linkButton.href = linkTarget;
-          linkButton.target = '_blank';
-          linkButton.rel = 'noopener noreferrer';
-          linkButton.textContent = primarySource && primarySource !== 'Unknown source'
-            ? `View on ${primarySource}`
-            : 'View article';
-          linkButton.addEventListener('click', (event) => {
-            event.stopPropagation();
+        const linkRecords = sourceRecords.filter((record) => record.url);
+        if (linkRecords.length > 0) {
+          const linkList = document.createElement('div');
+          linkList.className = 'card__link-buttons';
+          linkRecords.forEach((record) => {
+            const linkButton = document.createElement('a');
+            linkButton.className = 'card__link-button';
+            linkButton.href = record.url;
+            linkButton.target = '_blank';
+            linkButton.rel = 'noopener noreferrer';
+            linkButton.textContent = record.label ? `View on ${record.label}` : 'View article';
+            linkButton.addEventListener('click', (event) => {
+              event.stopPropagation();
+            });
+            linkList.appendChild(linkButton);
           });
-          footer.appendChild(linkButton);
+          footer.appendChild(linkList);
+        } else {
+          const linkPlaceholder = document.createElement('span');
+          linkPlaceholder.className = 'card__link-placeholder';
+          linkPlaceholder.textContent = 'Source link unavailable';
+          footer.appendChild(linkPlaceholder);
         }
 
         const meta = document.createElement('div');
@@ -926,9 +1020,6 @@
         const iocs = normaliseList(article.iocs || article.IOCs);
 
         const metaEntries = [];
-        if (cves.length) {
-          metaEntries.push(`${cves.length} CVE${cves.length === 1 ? '' : 's'}`);
-        }
         if (actors.length) {
           metaEntries.push(`${actors.length} actor${actors.length === 1 ? '' : 's'}`);
         }
@@ -951,6 +1042,38 @@
         });
 
         footer.appendChild(meta);
+
+        const cveContainer = document.createElement('div');
+        cveContainer.className = 'card__cves';
+        const cveLabel = document.createElement('span');
+        cveLabel.className = 'card__cves-label';
+        cveLabel.textContent = 'CVEs';
+        cveContainer.appendChild(cveLabel);
+
+        if (cves.length > 0) {
+          const cveList = document.createElement('div');
+          cveList.className = 'card__cve-list';
+          cves.slice(0, 6).forEach((cve) => {
+            const pill = document.createElement('span');
+            pill.className = 'card__cve-pill';
+            pill.textContent = cve;
+            cveList.appendChild(pill);
+          });
+          if (cves.length > 6) {
+            const remainder = document.createElement('span');
+            remainder.className = 'card__cve-pill card__cve-pill--more';
+            remainder.textContent = `+${cves.length - 6} more`;
+            cveList.appendChild(remainder);
+          }
+          cveContainer.appendChild(cveList);
+        } else {
+          const empty = document.createElement('span');
+          empty.className = 'card__cve-empty';
+          empty.textContent = 'None reported';
+          cveContainer.appendChild(empty);
+        }
+
+        footer.appendChild(cveContainer);
 
         card.appendChild(cardHeader);
         card.appendChild(summary);

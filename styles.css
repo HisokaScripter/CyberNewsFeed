@@ -281,7 +281,19 @@ body.filter-open {
 .card__footer {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.card__link-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.card__link-placeholder {
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .card__link-button {
@@ -314,6 +326,7 @@ body.filter-open {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%;
   color: var(--text-muted);
   font-size: 0.75rem;
 }
@@ -322,6 +335,44 @@ body.filter-open {
   padding: 4px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.card__cves {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card__cves-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.card__cve-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.card__cve-pill {
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: rgba(0, 243, 255, 0.15);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.card__cve-pill--more {
+  background: rgba(0, 243, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.card__cve-empty {
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .drawer {
@@ -444,6 +495,18 @@ body.filter-open {
 .drawer__section--source {
   align-items: flex-start;
   gap: 12px;
+}
+
+.drawer__source-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.drawer__source-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
 }
 
 .drawer__source-button {
