@@ -375,6 +375,14 @@ body.filter-open {
   font-size: 0.75rem;
 }
 
+.drawer__list-empty {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .drawer {
   position: fixed;
   inset: 0;

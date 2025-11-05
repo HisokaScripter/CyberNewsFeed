@@ -393,13 +393,27 @@
     return hasLinks;
   }
 
-  function renderList(container, values) {
+  function renderList(container, values, emptyMessage) {
     container.textContent = '';
-    values.forEach((value) => {
+    const listValues = Array.isArray(values) ? values.filter(Boolean) : [];
+
+    if (listValues.length === 0) {
+      if (emptyMessage) {
+        const emptyItem = document.createElement('li');
+        emptyItem.className = 'drawer__list-empty';
+        emptyItem.textContent = emptyMessage;
+        container.appendChild(emptyItem);
+      }
+      return false;
+    }
+
+    listValues.forEach((value) => {
       const item = document.createElement('li');
       item.textContent = value;
       container.appendChild(item);
     });
+
+    return true;
   }
 
   function showSection(key, hasContent) {
@@ -800,8 +814,8 @@
 
     const cves = normaliseList(article.CVEs || article.cves);
     if (detailRefs.CVEs) {
-      renderList(detailRefs.CVEs, cves);
-      showSection('CVEs', cves.length > 0);
+      const hasCves = renderList(detailRefs.CVEs, cves, 'No CVEs reported');
+      showSection('CVEs', hasCves || detailRefs.CVEs.childElementCount > 0);
     }
   }
 
@@ -1053,23 +1067,17 @@
         if (cves.length > 0) {
           const cveList = document.createElement('div');
           cveList.className = 'card__cve-list';
-          cves.slice(0, 6).forEach((cve) => {
+          cves.forEach((cve) => {
             const pill = document.createElement('span');
             pill.className = 'card__cve-pill';
             pill.textContent = cve;
             cveList.appendChild(pill);
           });
-          if (cves.length > 6) {
-            const remainder = document.createElement('span');
-            remainder.className = 'card__cve-pill card__cve-pill--more';
-            remainder.textContent = `+${cves.length - 6} more`;
-            cveList.appendChild(remainder);
-          }
           cveContainer.appendChild(cveList);
         } else {
           const empty = document.createElement('span');
           empty.className = 'card__cve-empty';
-          empty.textContent = 'None reported';
+          empty.textContent = 'No CVEs reported';
           cveContainer.appendChild(empty);
         }
 
