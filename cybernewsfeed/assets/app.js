@@ -41,7 +41,7 @@
   const detailRefs = {
     categories: drawer.querySelector('[data-detail="categories"]'),
     title: drawer.querySelector('[data-detail="title"]'),
-    source: drawer.querySelector('[data-detail="source"]'),
+    sources: drawer.querySelector('[data-detail="sources"]'),
     date: drawer.querySelector('[data-detail="date"]'),
     link: drawer.querySelector('[data-detail="link"]'),
     summary: drawer.querySelector('[data-detail="AI-Summary"]'),
@@ -193,14 +193,6 @@
     return labels;
   }
 
-  function resolvePrimarySource(article) {
-    const labels = collectSourceLabels(article);
-    if (labels.length > 0) {
-      return labels[0];
-    }
-    return 'Unknown source';
-  }
-
   function sortFilterValues(values) {
     return values
       .filter(Boolean)
@@ -283,6 +275,21 @@
     values.forEach((value) => {
       const pill = document.createElement('span');
       pill.className = 'drawer__pill';
+      pill.textContent = value;
+      container.appendChild(pill);
+    });
+  }
+
+  function renderSourceChips(container, values) {
+    if (!container) {
+      return;
+    }
+
+    container.textContent = '';
+    const entries = values && values.length ? values : ['Unknown source'];
+    entries.forEach((value) => {
+      const pill = document.createElement('span');
+      pill.className = 'source-pill';
       pill.textContent = value;
       container.appendChild(pill);
     });
@@ -649,8 +656,8 @@
     const sourceLabels = collectSourceLabels(article);
     const primarySource = sourceLabels[0] || 'Unknown source';
 
-    if (detailRefs.source) {
-      detailRefs.source.textContent = primarySource;
+    if (detailRefs.sources) {
+      renderSourceChips(detailRefs.sources, sourceLabels);
     }
 
     if (detailRefs.date) {
@@ -863,9 +870,29 @@
 
         const cardHeader = document.createElement('div');
         cardHeader.className = 'card__header';
-        const source = resolvePrimarySource(article);
+        const sourceLabels = collectSourceLabels(article);
+        const primarySource = sourceLabels[0] || 'Unknown source';
         const dateLabel = article.date || article.published || article.timestamp || '';
-        cardHeader.innerHTML = `<span>${escapeHTML(source)}</span><span>${escapeHTML(dateLabel)}</span>`;
+
+        const headerTopline = document.createElement('div');
+        headerTopline.className = 'card__header-topline';
+
+        const sourceLabel = document.createElement('span');
+        sourceLabel.className = 'card__primary-source';
+        sourceLabel.textContent = primarySource;
+        headerTopline.appendChild(sourceLabel);
+
+        const dateNode = document.createElement('span');
+        dateNode.className = 'card__date';
+        dateNode.textContent = dateLabel ? String(dateLabel) : '';
+        headerTopline.appendChild(dateNode);
+
+        cardHeader.appendChild(headerTopline);
+
+        const sourcesContainer = document.createElement('div');
+        sourcesContainer.className = 'card__sources';
+        renderSourceChips(sourcesContainer, sourceLabels);
+        cardHeader.appendChild(sourcesContainer);
 
         const summary = document.createElement('p');
         summary.className = 'card__summary';
@@ -882,8 +909,8 @@
           linkButton.href = linkTarget;
           linkButton.target = '_blank';
           linkButton.rel = 'noopener noreferrer';
-          linkButton.textContent = source && source !== 'Unknown source'
-            ? `View on ${source}`
+          linkButton.textContent = primarySource && primarySource !== 'Unknown source'
+            ? `View on ${primarySource}`
             : 'View article';
           linkButton.addEventListener('click', (event) => {
             event.stopPropagation();

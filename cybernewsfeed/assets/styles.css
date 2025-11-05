@@ -227,13 +227,49 @@ body.filter-open {
 
 .card__header {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+.card__header-topline {
+  display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  color: var(--text-secondary);
   font-size: 0.8125rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.card__primary-source {
+  font-weight: 600;
+}
+
+.card__date {
+  color: var(--text-muted);
+}
+
+.card__sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.card__sources .source-pill {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .card__summary {
@@ -366,9 +402,29 @@ body.filter-open {
 
 .drawer__meta {
   display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 12px;
   color: var(--text-secondary);
   font-size: 0.85rem;
+}
+
+.drawer__sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.drawer__sources .source-pill {
+  background: var(--pill-bg);
+  color: var(--pill-text);
+  font-size: 0.75rem;
+}
+
+.drawer__date {
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 .drawer__section {
