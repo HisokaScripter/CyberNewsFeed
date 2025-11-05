@@ -1,0 +1,8 @@
+{
+  "json_output": "cybersec_news.json",
+  "csv_output": "",
+  "html_output": "index.html",
+  "template_path": "",
+  "assets_dir": "",
+  "print_summary": false
+}
